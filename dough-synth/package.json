@@ -1,0 +1,27 @@
+{
+  "name": "dough-synth",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "wip synth engine that runs natively and in the browser",
+  "main": "dough.js",
+  "author": "Felix Roos <flix91@gmail.com>",
+  "license": "AGPL-3.0-or-later",
+  "bin": "./server.mjs",
+  "files": [
+    "dough.js",
+    "dough.c",
+    "dough.wasm",
+    "server.mjs",
+    "scripts/build-wasm.sh",
+    "memory.png"
+  ],
+  "scripts": {
+    "b": "./scripts/build-native.sh",
+    "br": "./scripts/build-native.sh && ./dough",
+    "dev": "node server.mjs",
+    "w": "./scripts/build-wasm.sh",
+    "snapshots": "./scripts/write-snapshots.sh",
+    "test": "./scripts/test-snapshots.sh",
+    "osc": "npx --yes @strudel/osc --port 7771"
+  }
+}
