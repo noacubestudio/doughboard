@@ -1,6 +1,8 @@
 const canvas = document.getElementById('gl_canvas');
 const gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
 
+const cursor_color = new Uint8Array(4);
+
 const vertex_source = /*glsl*/`
     attribute vec4 a_position;
     void main() {
@@ -12,6 +14,7 @@ const fragment_source = /*glsl*/`
     precision highp float;
     uniform vec2 u_resolution;
     uniform float u_time;
+    uniform vec2 u_cursor_color;
 
     uniform vec2 u_grid_size;
     uniform float u_column_offset;
@@ -35,7 +38,9 @@ const fragment_source = /*glsl*/`
     }
 
     void main() {
-        vec2 uv = gl_FragCoord.xy - 0.5 * u_resolution;
+        float tile_stepsize = 1./64.; // how much to change the color channel by
+
+        vec2 uv = gl_FragCoord.xy - 0.5 * u_resolution + 0.5;
         if (u_spiral_mode == 0) {
             uv *= rotation(PI * 2.0 * u_tilt);
             uv /= u_grid_size;
@@ -50,17 +55,29 @@ const fragment_source = /*glsl*/`
         }
         //uv.y = log2(uv.y);
         vec2 tile_uv = mod(uv, 1.0);
-        float tile_i = 0.5 + (floor(uv.y) / 64.); // magic number for now.
+        float tile_i = 0.5 + floor(uv.y) * tile_stepsize;
 
         float key_snapped = floor(tile_uv.y * u_edo + 0.5) / u_edo;
         vec2 key_uv = vec2(tile_uv.x, mod(tile_uv.y * u_edo + 0.5, 1.0));
 
+        float width = 0.03;
+        if ((key_snapped == 0. && abs(tile_i) == 0.5) 
+              || (key_snapped == 1. && abs(tile_i) == 0.5 - tile_stepsize)) {
+            width = 0.06;
+        }
         float grid = smoothstep(
-            0.45, 0.5,
-            max(distance(key_uv.x, 0.5), distance(key_uv.y, 0.5))
+            width, width-0.01,
+            abs(distance(key_uv, vec2(0.5))-0.45)
         );
-        if ((key_snapped == 0. && abs(tile_i) == 0.5) || (key_snapped == 1. && abs(tile_i) == 0.5-1./64.)) {
-            grid = 1.;
+        float dot = smoothstep(
+            width, width-0.01,
+            distance(key_uv, vec2(0.5))-0.45
+        );
+        
+        float match_p = u_cursor_color.x - key_snapped;
+        float match_o = u_cursor_color.y - tile_i;
+        if (abs(match_p) < 0.01 && abs(match_o) < 0.01) {
+            grid = max(grid, dot);
         }
 
         gl_FragColor = vec4(key_snapped, tile_i, grid, 1.0);
@@ -132,6 +149,10 @@ function render(gl, program, time) {
     gl.uniform1f(gl.getUniformLocation(program, 'u_edo'), 
         12
     );
+    gl.uniform2f(gl.getUniformLocation(program, 'u_cursor_color'),
+        cursor_color[0] >= 0.0 ? cursor_color[0] / 255 : 0.0, 
+        cursor_color[1] >= 0.0 ? cursor_color[1] / 255 : 0.0
+    );
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
@@ -169,14 +190,24 @@ function touched_canvas(e) {
         }
     }
     
-    const x = e.clientX;
-    const y = e.clientY;
-    const data = new Uint8Array(4);
-    gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    const [r, g, b, a] = data;
+    let o; let p;
+    if (is_down) {
+        const x = e.clientX;
+        const y = e.clientY;
+        const data = new Uint8Array(4);
+        gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        const [r, g, b, a] = data;
+        cursor_color.set(data);
+        p = r;
+        o = g;
+    } else {
+        p = cursor_color[0];
+        o = cursor_color[1];
+        cursor_color.set([-1,-1,-1,-1]);
+    }
 
-    const octave = Math.round(g / 4) - 29;
-    const pitch = r / 255; // rounding...hmm. something isn't right with this number
+    const octave = Math.round(o / 4) - 29;
+    const pitch = p / 255; // rounding...hmm. something isn't right with this number
     const mult = octave + pitch;
     const freq = 440 * (2 ** (mult-4));
     //console.log(`pitch: ${mult}, freq: ${freq}.`)
