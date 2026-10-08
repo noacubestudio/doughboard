@@ -1,17 +1,21 @@
 const canvas = document.getElementById('gl_canvas');
-const gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
+const gl = canvas.getContext('webgl2', {preserveDrawingBuffer: true});
+if (!gl) {
+  throw new Error('WebGL2 is not available in this browser.');
+}
 
 const cursor_color = new Uint8Array(4);
 
-const vertex_source = /*glsl*/`
-    attribute vec4 a_position;
+const vertex_source = /*glsl*/`#version 300 es 
+    in vec4 a_position;
     void main() {
         gl_Position = a_position;
     }
 `;
 
-const fragment_source = /*glsl*/`
+const fragment_source = /*glsl*/`#version 300 es 
     precision highp float;
+
     uniform vec2 u_resolution;
     uniform float u_time;
     uniform vec2 u_cursor_color;
@@ -22,6 +26,8 @@ const fragment_source = /*glsl*/`
     uniform float u_edo;
     uniform float u_tilt;
     uniform int u_spiral_mode;
+
+    out vec4 outColor;
 
     #define PI 3.1415926538
 
@@ -81,7 +87,7 @@ const fragment_source = /*glsl*/`
             grid = max(grid, dot);
         }
 
-        gl_FragColor = vec4(key_snapped, tile_i, grid, 1.0);
+        outColor = vec4(key_snapped, tile_i, grid, 1.0);
     }
 `
 
