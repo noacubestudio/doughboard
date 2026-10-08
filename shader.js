@@ -16,6 +16,7 @@ const fragment_source = /*glsl*/`
     uniform float u_time;
     uniform vec2 u_cursor_color;
 
+    uniform vec2 u_start_pos;
     uniform vec2 u_grid_size;
     uniform float u_column_offset;
     uniform float u_edo;
@@ -40,7 +41,7 @@ const fragment_source = /*glsl*/`
     void main() {
         float tile_stepsize = 1./64.; // how much to change the color channel by
 
-        vec2 uv = gl_FragCoord.xy - 0.5 * u_resolution + 0.5;
+        vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
         if (u_spiral_mode == 0) {
             uv *= rotation(PI * 2.0 * u_tilt);
             uv /= u_grid_size;
@@ -136,6 +137,9 @@ function render(gl, program, time) {
     );
     gl.uniform1i(gl.getUniformLocation(program, 'u_spiral_mode'), 
         0
+    );
+    gl.uniform2f(gl.getUniformLocation(program, 'u_start_pos'),
+        0.5, 0.5
     );
     gl.uniform2f(gl.getUniformLocation(program, 'u_grid_size'),
         50, 600
