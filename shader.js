@@ -87,6 +87,11 @@ const fragment_source = /*glsl*/`#version 300 es
             grid = max(grid, dot);
         }
 
+        // not initiated yet, show that somehow.
+        if (u_time == 0.) {
+            grid *= 0.5;
+        }
+
         outColor = vec4(key_snapped, tile_i, grid, 1.0);
     }
 `
@@ -132,34 +137,23 @@ function setup_shader(gl, vertex_source, fragment_source) {
     return program;
 }
 
+let audio_started = false;
 function render(gl, program, time) {
     gl.useProgram(program);
 
-    gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), 
-        gl.canvas.width, gl.canvas.height
-    );
-    gl.uniform1f(gl.getUniformLocation(program, 'u_time'), 
-        time * 0.001
-    );
-    gl.uniform1i(gl.getUniformLocation(program, 'u_spiral_mode'), 
-        0
-    );
-    gl.uniform2f(gl.getUniformLocation(program, 'u_start_pos'),
-        0.5, 0.5
-    );
-    gl.uniform2f(gl.getUniformLocation(program, 'u_grid_size'),
-        50, 600
-    );
-    gl.uniform1f(gl.getUniformLocation(program, 'u_column_offset'), 
-        2/12
-    );
-    gl.uniform1f(gl.getUniformLocation(program, 'u_tilt'), 
-        0.0
-    );
-    gl.uniform1f(gl.getUniformLocation(program, 'u_edo'), 
-        12
-    );
-    gl.uniform2f(gl.getUniformLocation(program, 'u_cursor_color'),
+    function at(string) {
+        return gl.getUniformLocation(program, string)
+    }
+
+    gl.uniform2f(at('u_resolution'), gl.canvas.width, gl.canvas.height);
+    gl.uniform1f(at('u_time'), audio_started ? time * 0.001 : 0);
+    gl.uniform1i(at('u_spiral_mode'), 0);
+    gl.uniform2f(at('u_start_pos'), 0.5, 0.5);
+    gl.uniform2f(at('u_grid_size'), 50, 600);
+    gl.uniform1f(at('u_column_offset'), 2/12);
+    gl.uniform1f(at('u_tilt'), 0.0);
+    gl.uniform1f(at('u_edo'), 12);
+    gl.uniform2f(at('u_cursor_color'),
         cursor_color[0] >= 0.0 ? cursor_color[0] / 255 : 0.0, 
         cursor_color[1] >= 0.0 ? cursor_color[1] / 255 : 0.0
     );
@@ -183,12 +177,26 @@ function animate(time) {
 }
 requestAnimationFrame(animate);
 
+const init_audio = new Promise((resolve) =>
+    document.addEventListener("click", function init() {
+        const audio_context = new AudioContext();
+        // possibly hide a prompt here
+        resolve(audio_context);
+        audio_started = true;
+        document.removeEventListener("click", init);
+    })
+);
 
 import { Dough } from "/dough-synth/dough.js";
 const dough = new Dough({base: "/dough-synth/"});
 
 let is_down = false;
-function touched_canvas(e) {
+async function touched_canvas(e) {
+    await init_audio;
+    if (!dough) {
+        return;
+    }
+    e.preventDefault();
     if (is_down) {
         if (e.type == "pointerup" || e.type == "pointerout") is_down = false;
     } else {
