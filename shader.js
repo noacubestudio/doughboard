@@ -4,7 +4,7 @@ if (!gl) {
   throw new Error('WebGL2 is not available in this browser.');
 }
 
-const cursor_color = new Uint8Array(4);
+let playing_pitches = [-99];
 
 const vertex_source = /*glsl*/`#version 300 es 
     in vec4 a_position;
@@ -18,14 +18,19 @@ const fragment_source = /*glsl*/`#version 300 es
 
     uniform vec2 u_resolution;
     uniform float u_time;
-    uniform vec2 u_cursor_color;
+    uniform float[16] u_playing_pitches;
+    uniform int u_playing_pitches_count;
 
+    uniform float u_tilt;
     uniform vec2 u_start_pos;
+
+    uniform int u_spiral_mode;
     uniform vec2 u_grid_size;
     uniform float u_column_offset;
+    uniform float u_column_sharp;
+
     uniform float u_edo;
-    uniform float u_tilt;
-    uniform int u_spiral_mode;
+    uniform float u_snap_strength;
 
     out vec4 outColor;
 
@@ -44,55 +49,91 @@ const fragment_source = /*glsl*/`#version 300 es
         return vec2(radius, norm_angle);
     }
 
-    void main() {
-        float tile_stepsize = 1./64.; // how much to change the color channel by
+    // // All components are in the range [0…1], including hue.
+    // vec3 hsv2rgb(vec3 c)
+    // {
+    //     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    //     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    //     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    // }
 
+    void main() {
+        // start with actual pixel scale, 1.0 = 1px., at start pos which is in normal 0-1 uv space.
+        // half pixel offset for alignment, not sure if that makes sense.
         vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
+
         if (u_spiral_mode == 0) {
             uv *= rotation(PI * 2.0 * u_tilt);
             uv /= u_grid_size;
-            uv.x += 0.5;
-            uv.y += floor(uv.x) * u_column_offset;
         } else {
+            // spiral mode where the column height is ignored and always wraps
+            // once around the center in polar coords instead.
             uv /= u_resolution.y; // y 0-1 - wrap octave once around by default.
             uv = cart_to_polar(uv);
             uv.x *= u_resolution.y / u_grid_size.x; // rings using grid size
             uv.x -= uv.y; // spiral
-            uv.y = (uv.y + floor(uv.x)) * u_column_offset; // half turn depends on col offset though...
+            uv.y *= u_column_offset; //scale so that each revolution is as long as offset
         }
-        //uv.y = log2(uv.y);
-        vec2 tile_uv = mod(uv, 1.0);
-        float tile_i = 0.5 + floor(uv.y) * tile_stepsize;
 
-        float key_snapped = floor(tile_uv.y * u_edo + 0.5) / u_edo;
-        vec2 key_uv = vec2(tile_uv.x, mod(tile_uv.y * u_edo + 0.5, 1.0));
+        // warp grid in x to make column offset smooth or sharp
+        float colx = uv.x;
+        if (u_column_sharp == 1.0) {
+            colx = floor(colx) + 0.5;
+        } else if (u_column_sharp > 0.0) {
+            float half_s = u_column_sharp / 2.;
+            colx = floor(colx) + smoothstep(half_s, 1.-half_s, mod(colx, 1.0));
+        }
+        // apply offset per column
+        uv.y += colx * u_column_offset;
 
-        float width = 0.03;
-        if ((key_snapped == 0. && abs(tile_i) == 0.5) 
-              || (key_snapped == 1. && abs(tile_i) == 0.5 - tile_stepsize)) {
-            width = 0.06;
-        }
-        float grid = smoothstep(
-            width, width-0.01,
-            abs(distance(key_uv, vec2(0.5))-0.45)
+        // split part >1 and <1 into separate color channels.
+        // this is to make the output image be able to display many different pitches.
+        float g_stepsize = 1./64.; // how much to change the second color channel by
+        vec3 col = vec3(
+            // r = pitch
+            mod(uv.y, 1.0),
+            // g = octave steps            
+            0.5 + floor(uv.y) * g_stepsize,
+            // b = visual only stuff
+            0.0
         );
-        float dot = smoothstep(
-            width, width-0.01,
-            distance(key_uv, vec2(0.5))-0.45
-        );
-        
-        float match_p = u_cursor_color.x - key_snapped;
-        float match_o = u_cursor_color.y - tile_i;
-        if (abs(match_p) < 0.01 && abs(match_o) < 0.01) {
-            grid = max(grid, dot);
+
+        // use blue channel to show active notes
+        for (int i = 0; i < 16; i++) {
+            if (u_playing_pitches_count == i) { break; }
+            float rect_height = max(0.25, u_snap_strength) / u_edo;
+            if (abs(u_playing_pitches[i] - uv.y) < 0.5 * rect_height) {
+                col.b = 1.0;
+            }
         }
+
+        // show edo scale
+        if (u_snap_strength == 1.0) {
+            col.r = floor(col.r * u_edo + 0.5) / u_edo;
+        } else if (u_snap_strength > 0.0) {
+            float half_s = u_snap_strength / 2.;
+            col.r *= u_edo;
+            col.r = floor(col.r) + smoothstep(half_s, 1.-half_s, mod(col.r, 1.0));
+            col.r /= u_edo;
+        }
+
+        // add centered dots on edo steps
+        float dotl = 2. - u_snap_strength;
+        vec2 step_uv = vec2(
+            mod(uv.x + 0.5, 1.0) - 0.5, 
+            (mod(uv.y * u_edo + 0.5, 1.0) - 0.5) * dotl
+        );
+        float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
+        col.b = max(col.b, 1. - smoothstep(0.0, 1.0, dot_dist));
 
         // not initiated yet, show that somehow.
         if (u_time == 0.) {
-            grid *= 0.5;
+            col.b = 1. - col.b;
         }
 
-        outColor = vec4(key_snapped, tile_i, grid, 1.0);
+        //col = hsv2rgb(col.xzy);
+
+        outColor = vec4(col.rgb, 1.0);
     }
 `
 
@@ -151,12 +192,12 @@ function render(gl, program, time) {
     gl.uniform2f(at('u_start_pos'), 0.5, 0.5);
     gl.uniform2f(at('u_grid_size'), 50, 600);
     gl.uniform1f(at('u_column_offset'), 2/12);
+    gl.uniform1f(at('u_column_sharp'), 0.8);
     gl.uniform1f(at('u_tilt'), 0.0);
     gl.uniform1f(at('u_edo'), 12);
-    gl.uniform2f(at('u_cursor_color'),
-        cursor_color[0] >= 0.0 ? cursor_color[0] / 255 : 0.0, 
-        cursor_color[1] >= 0.0 ? cursor_color[1] / 255 : 0.0
-    );
+    gl.uniform1f(at('u_snap_strength'), 0.6);
+    gl.uniform1fv(at('u_playing_pitches'), playing_pitches);
+    gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
@@ -207,28 +248,29 @@ async function touched_canvas(e) {
             return;
         }
     }
-    
-    let o; let p;
-    if (is_down) {
-        const x = e.clientX;
-        const y = e.clientY;
-        const data = new Uint8Array(4);
-        gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
-        const [r, g, b, a] = data;
-        cursor_color.set(data);
-        p = r;
-        o = g;
-    } else {
-        p = cursor_color[0];
-        o = cursor_color[1];
-        cursor_color.set([-1,-1,-1,-1]);
-    }
 
-    const octave = Math.round(o / 4) - 29;
-    const pitch = p / 255; // rounding...hmm. something isn't right with this number
-    const mult = octave + pitch;
-    const freq = 440 * (2 ** (mult-4));
-    //console.log(`pitch: ${mult}, freq: ${freq}.`)
+    if (!is_down) {
+        dough.evaluate({dough: "hush_group", group: 1});
+        dough.evaluate({dough: "hush_group", group: 2});
+        playing_pitches = [-99];
+        return;
+    }
+    
+    // get the color at the cursor
+    const x = e.clientX;
+    const y = e.clientY;
+    const data = new Uint8Array(4);
+    gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    const [r, g, b, a] = data;
+
+    // r is the octave. the calculation brings it in the desired range.
+    // g is the specific note within the octave
+    const pitch = (Math.round(g / 4) - 32) + (r / 255);
+    playing_pitches = [pitch, -2]; // -2 is for the temp bass note
+
+    const octave_offset = -1; // sound only, doesn't affect storage
+    const freq = 440 * (2 ** (pitch + octave_offset));
+    //console.log(`pitch: ${pitch}, freq: ${freq}.`)
 
     const duration = is_down ? 30.0 : 0.01;
     dough.evaluatePath(`
