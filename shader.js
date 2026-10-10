@@ -24,7 +24,7 @@ const fragment_source = /*glsl*/`#version 300 es
     uniform float u_tilt;
     uniform vec2 u_start_pos;
 
-    uniform int u_spiral_mode;
+    uniform float u_spiralize;
     uniform vec2 u_grid_size;
     uniform float u_column_offset;
     uniform float u_column_sharp;
@@ -49,6 +49,23 @@ const fragment_source = /*glsl*/`#version 300 es
         return vec2(radius, norm_angle);
     }
 
+    vec2 gridize(vec2 uv) {
+        uv *= rotation(PI * 2.0 * u_tilt);
+        uv /= u_grid_size;
+        return uv;
+    }
+
+    // spiral mode where the column height is ignored and always wraps
+    // once around the center in polar coords instead.
+    vec2 spiralize(vec2 uv) {
+        uv /= u_resolution.y; // y 0-1 - wrap octave once around by default.
+        uv = cart_to_polar(uv);
+        uv.x *= u_resolution.y / u_grid_size.x; // rings using grid size
+        uv.x -= uv.y; // spiral
+        uv.y *= u_column_offset; //scale so that each revolution is as long as offset
+        return uv;
+    }
+
     // // All components are in the range [0…1], including hue.
     // vec3 hsv2rgb(vec3 c)
     // {
@@ -62,18 +79,7 @@ const fragment_source = /*glsl*/`#version 300 es
         // half pixel offset for alignment, not sure if that makes sense.
         vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
 
-        if (u_spiral_mode == 0) {
-            uv *= rotation(PI * 2.0 * u_tilt);
-            uv /= u_grid_size;
-        } else {
-            // spiral mode where the column height is ignored and always wraps
-            // once around the center in polar coords instead.
-            uv /= u_resolution.y; // y 0-1 - wrap octave once around by default.
-            uv = cart_to_polar(uv);
-            uv.x *= u_resolution.y / u_grid_size.x; // rings using grid size
-            uv.x -= uv.y; // spiral
-            uv.y *= u_column_offset; //scale so that each revolution is as long as offset
-        }
+        uv = mix(gridize(uv), spiralize(uv), u_spiralize);
 
         // warp grid in x to make column offset smooth or sharp
         float colx = uv.x;
@@ -188,7 +194,7 @@ function render(gl, program, time) {
 
     gl.uniform2f(at('u_resolution'), gl.canvas.width, gl.canvas.height);
     gl.uniform1f(at('u_time'), audio_started ? time * 0.001 : 0);
-    gl.uniform1i(at('u_spiral_mode'), 0);
+    gl.uniform1f(at('u_spiralize'), 0.0);
     gl.uniform2f(at('u_start_pos'), 0.5, 0.5);
     gl.uniform2f(at('u_grid_size'), 50, 600);
     gl.uniform1f(at('u_column_offset'), 2/12);
