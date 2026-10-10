@@ -16,10 +16,52 @@
                 -webkit-user-select: none;
                 user-select: none;
             }
+            #menu {
+                position: absolute;
+                margin: 2px;
+                padding: 3px;
+                bottom: 0;
+                left: 0;
+                background-color: #22222290;
+                border-radius: 16px;
+            }
+            #menu_list {
+                margin: 4px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            #menu_list div {
+                display: flex;
+                gap: 4px;
+            }
+            #menu label, #menu p {
+                color: white;
+                font-family: monospace;
+                font-size: large;
+                width: 10em;
+            }
+            #menu p {
+                margin: 8px;
+                color: greenyellow;
+            }
+            #menu #buttons {
+                display: flex;
+                gap: 2px;
+            }
+            #menu button {
+                font-size: large;
+                font-family: monospace;
+                border: none;
+                height: 26px;
+                border-radius: 13px;
+                padding: 0px 8px;
+            }
         </style>
     </head>
     <body>
         <canvas id="gl_canvas" width="0" height="0"></canvas>
         <script type="module" src="shader.js"></script>
+        <div id="menu"><p id="intro_text">Click canvas once to start audio.</p></div>
     </body>
 </html>

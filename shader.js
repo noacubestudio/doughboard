@@ -6,6 +6,21 @@ if (!gl) {
 
 // each is {pitch, pointer_id, group}
 let playing_pitches = [];
+let audio_started = false;
+const settings = {
+    spiralize:     {v: 0.0, min: 0.0, max: 1.0},
+    start_pos_x:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    start_pos_y:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    grid_size_x:   {v: 50, min: 20, max: 200},
+    grid_size_y:   {v: 600, min: 40, max: 1000, step: 5},
+    grid_sharp_x:  {v: 0.8, min: 0.0, max: 1.0, step: 0.05},
+    grid_sharp_y:  {v: 0.6, min: 0.0, max: 1.0, step: 0.05},
+    column_offset: {v: 2., min: 0.0, max: 12.0, step: 0.1},
+    tilt:          {v: 0.0, min: 0.0, max: 1.0, step: 0.01},
+    edo:           {v: 12, min: 1, max: 128},
+    origin_freq:   {v: 220, min: 55, max: 880},
+    delay:         {v: 0.2, min: 0, max: 1, step: 0.05}
+}
 
 const vertex_source = /*glsl*/`#version 300 es 
     in vec4 a_position;
@@ -58,10 +73,12 @@ const fragment_source = /*glsl*/`#version 300 es
     // spiral mode where the column height is ignored and always wraps
     // once around the center in polar coords instead.
     vec2 spiralize(vec2 uv) {
+        uv *= rotation(PI * 2.0 * u_tilt);
         uv /= u_resolution.y; // y 0-1 - wrap octave once around by default.
         uv = cart_to_polar(uv);
         uv.x *= u_resolution.y / u_grid_size.x; // rings using grid size
         uv.x -= uv.y; // spiral
+        uv.y -= 4.;
         uv.y *= u_column_offset; //scale so that each revolution is as long as offset
         return uv;
     }
@@ -84,7 +101,7 @@ const fragment_source = /*glsl*/`#version 300 es
         // warp grid in x to make column offset smooth or sharp
         float colx = uv.x;
         if (u_grid_sharp.x == 1.0) {
-            colx = floor(colx) + 0.5;
+            colx = floor(colx  + 0.5);
         } else if (u_grid_sharp.x > 0.0) {
             float half_s = u_grid_sharp.x / 2.;
             colx = floor(colx) + smoothstep(half_s, 1.-half_s, mod(colx, 1.0));
@@ -184,7 +201,6 @@ function setup_shader(gl, vertex_source, fragment_source) {
     return program;
 }
 
-let audio_started = false;
 function render(gl, program, time) {
     gl.useProgram(program);
 
@@ -194,19 +210,23 @@ function render(gl, program, time) {
 
     gl.uniform2f(at('u_resolution'), gl.canvas.width, gl.canvas.height);
     gl.uniform1f(at('u_time'), audio_started ? time * 0.001 : 0);
-    gl.uniform1f(at('u_spiralize'), 0.0);
-    gl.uniform2f(at('u_start_pos'), 0.5, 0.5);
-    gl.uniform2f(at('u_grid_size'), 50, 600);
-    gl.uniform2f(at('u_grid_sharp'), 0.8, 0.6);
-    gl.uniform1f(at('u_column_offset'), 2/12);
-    gl.uniform1f(at('u_tilt'), 0.0);
-    gl.uniform1f(at('u_edo'), 12);
+
     const pitches = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.pitch) : [-99];
     gl.uniform1fv(at('u_playing_pitches'), pitches);
     gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
 
+    gl.uniform1f(at('u_spiralize'), settings.spiralize.v);
+    gl.uniform2f(at('u_start_pos'), settings.start_pos_x.v, settings.start_pos_y.v);
+    gl.uniform2f(at('u_grid_size'), settings.grid_size_x.v, settings.grid_size_y.v);
+    gl.uniform2f(at('u_grid_sharp'), settings.grid_sharp_x.v, settings.grid_sharp_y.v);
+    gl.uniform1f(at('u_column_offset'), settings.column_offset.v / 12);
+    gl.uniform1f(at('u_tilt'), settings.tilt.v);
+    gl.uniform1f(at('u_edo'), settings.edo.v);
+
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
+
 
 function resize_canvas() {
     canvas.width = window.innerWidth;
@@ -216,20 +236,22 @@ function resize_canvas() {
 window.addEventListener('resize', resize_canvas);
 resize_canvas();
 
-const shader_program = setup_shader(gl, vertex_source, fragment_source);
 
+const shader_program = setup_shader(gl, vertex_source, fragment_source);
 function animate(time) {
     render(gl, shader_program, time);
     requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
 
+const intro_text_el = document.getElementById("intro_text");
 const init_audio = new Promise((resolve) =>
     document.addEventListener("click", function init() {
         const audio_context = new AudioContext();
         // possibly hide a prompt here
         resolve(audio_context);
         audio_started = true;
+        intro_text_el.style.display = "none";
         document.removeEventListener("click", init);
     })
 );
@@ -276,8 +298,7 @@ async function touched_canvas(e) {
     // g is the specific note within the octave
     const pitch = (Math.round(g / 4) - 32) + (r / 255);
 
-    const octave_offset = -1; // sound only, doesn't affect storage
-    const freq = 440 * (2 ** (pitch + octave_offset));
+    const freq = settings.origin_freq.v * (2 ** pitch);
     //console.log(`pitch: ${pitch}, freq: ${freq}.`)
 
     if (p_index == -1) {
@@ -291,10 +312,74 @@ async function touched_canvas(e) {
         dough: "play", group, voices: 1,
         freq, glide: 0.1, lpf: 7000,
         s: "saw", vib: 6, vibmod: 0.05, phaser: 0.5, phaserdepth: 0.1,
-        attack: .02, release: .3, delay: 0.2
+        attack: .02, release: .3, delay: settings.delay.v
     });
 }
 canvas.addEventListener('pointerdown', touched_canvas);
 canvas.addEventListener('pointermove', touched_canvas);
 canvas.addEventListener('pointerup', touched_canvas);
 canvas.addEventListener('pointerout', touched_canvas);
+
+function make_range_div(value, name, min, max, step) {
+    const div_el = document.createElement("div");
+    const range_el = document.createElement("input");
+    const label_el = document.createElement("label");
+    range_el.type = "range";
+    range_el.value = value;
+    range_el.id = "range_" + name;
+    range_el.name = name;
+    label_el.innerHTML = name + ": " + value;
+    label_el.id = "label_" + name;
+    if (min) range_el.min = min;
+    if (max) range_el.max = max;
+    if (step) range_el.step = step;
+    range_el.addEventListener("input", (e) => {
+        const v = e.target.value;
+        settings[name].v = v;
+        label_el.innerHTML = name + ": " + v;
+    });
+    div_el.appendChild(range_el);
+    div_el.appendChild(label_el);
+    return div_el;
+}
+
+let menu_shown = true;
+function make_menu() {
+    const menu_el = document.getElementById("menu");
+    const menu_list_el = document.createElement("div");
+    menu_list_el.id = "menu_list";
+    for (const [param, details] of Object.entries(settings)) {
+        const {v, min, max, step} = details;
+        details.default = v;
+        menu_list_el.appendChild(make_range_div(v, param, min, max, step));
+    }
+    menu_el.appendChild(menu_list_el);
+
+    const hide_button_el = document.createElement("button");
+    hide_button_el.innerText = "Hide";
+    hide_button_el.addEventListener("click", (e) => {
+        menu_shown = !menu_shown;
+        hide_button_el.innerText = menu_shown ? "Hide" : "Show";
+        menu_list_el.style.display = menu_shown ? "inherit" : "none";
+        reset_button_el.style.display = menu_shown ? "inline-block" : "none";
+    });
+
+    const reset_button_el = document.createElement("button");
+    reset_button_el.addEventListener("click", (e) => {
+        for (const [param, details] of Object.entries(settings)) {
+            const range_el = document.getElementById("range_" + param);
+            const label_el = document.getElementById("label_" + param);
+            range_el.value = details.default;
+            label_el.innerHTML = param + ": " + details.default;
+            details.v = details.default;
+        }
+    });
+    reset_button_el.innerText = "Reset to default";
+
+    const buttons_el = document.createElement("div");
+    buttons_el.id = "buttons"
+    buttons_el.appendChild(hide_button_el);
+    buttons_el.appendChild(reset_button_el);
+    menu_el.appendChild(buttons_el);
+}
+make_menu();
