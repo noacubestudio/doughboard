@@ -189,7 +189,7 @@ function render(gl, program, time) {
     gl.useProgram(program);
 
     function at(string) {
-        return gl.getUniformLocation(program, string)
+        return gl.getUniformLocation(program, string);
     }
 
     gl.uniform2f(at('u_resolution'), gl.canvas.width, gl.canvas.height);
@@ -251,7 +251,7 @@ async function touched_canvas(e) {
         // remove existing
         if (p_index == -1) return;
         dough.evaluate({dough: "hush_group", group: playing_pitches[p_index].group});
-        playing_pitches.splice(p_index); 
+        playing_pitches.splice(p_index, 1); 
         return;
     } else if (e.type == "pointermove") {
         if (p_index == -1) return;
