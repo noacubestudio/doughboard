@@ -24,32 +24,43 @@
                 left: 0;
                 background-color: #22222290;
                 border-radius: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
             }
-            #menu_list {
+            #menu * {
+                font-family: monospace;
+                font-size: large;
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+            #menu-list {
                 margin: 4px;
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
             }
-            #menu_list div {
+            #menu-list div {
                 display: flex;
                 gap: 4px;
             }
-            #menu label, #menu p {
+            #menu label {
                 color: white;
-                font-family: monospace;
-                font-size: large;
-                width: 10em;
+                min-width: 10em;
             }
             #menu p {
-                margin: 8px;
-                color: greenyellow;
+                margin: 2px 6px;
             }
-            #menu #buttons {
+            #menu p, #menu a {
+                color: lightgrey;
+                font-size: medium;
+            }
+            #menu-buttons {
                 display: flex;
                 gap: 2px;
             }
-            #menu button {
+            #menu-buttons button {
                 font-size: large;
                 font-family: monospace;
                 border: none;
@@ -62,6 +73,13 @@
     <body>
         <canvas id="gl_canvas" width="0" height="0"></canvas>
         <script type="module" src="shader.js"></script>
-        <div id="menu"><p id="intro_text">Click canvas once to start audio.</p></div>
+        <div id="menu">
+            <p id="intro_text">click canvas once to start audio.</p>
+            <div id="menu-list"></div>
+            <p id="about-text" style="margin-bottom: 8px !important;">
+                <a href="https://github.com/noacubestudio/doughboard/">view source</a>. made with <a href="https://dough.strudel.cc/">dough</a>
+            </p>
+            <div id="menu-buttons"></div>
+        </div>
     </body>
 </html>

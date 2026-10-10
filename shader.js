@@ -12,7 +12,7 @@ const settings = {
     start_pos_x:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     start_pos_y:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     grid_size_x:   {v: 50, min: 20, max: 200},
-    grid_size_y:   {v: 600, min: 40, max: 1000, step: 5},
+    grid_size_y:   {v: 600, min: 100, max: 1400, step: 5},
     grid_sharp_x:  {v: 0.8, min: 0.0, max: 1.0, step: 0.05},
     grid_sharp_y:  {v: 0.6, min: 0.0, max: 1.0, step: 0.05},
     column_offset: {v: 2., min: 0.0, max: 12.0, step: 0.1},
@@ -345,26 +345,27 @@ function make_range_div(value, name, min, max, step) {
 
 let menu_shown = true;
 function make_menu() {
-    const menu_el = document.getElementById("menu");
-    const menu_list_el = document.createElement("div");
-    menu_list_el.id = "menu_list";
+    const menu_list_el = document.getElementById("menu-list");
+    const buttons_el = document.getElementById("menu-buttons");
+    const about_text_el = document.getElementById("about-text");
+
     for (const [param, details] of Object.entries(settings)) {
         const {v, min, max, step} = details;
         details.default = v;
         menu_list_el.appendChild(make_range_div(v, param, min, max, step));
     }
-    menu_el.appendChild(menu_list_el);
 
     const hide_button_el = document.createElement("button");
-    hide_button_el.innerText = "Hide";
+    hide_button_el.innerText = "hide";
     hide_button_el.addEventListener("click", (e) => {
         menu_shown = !menu_shown;
-        hide_button_el.innerText = menu_shown ? "Hide" : "Show";
+        hide_button_el.innerText = menu_shown ? "hide" : "show";
         menu_list_el.style.display = menu_shown ? "inherit" : "none";
         reset_button_el.style.display = menu_shown ? "inline-block" : "none";
+        about_text_el.style.display = menu_shown ? "inline" : "none";
     });
-
     const reset_button_el = document.createElement("button");
+    reset_button_el.innerText = "reset to default";
     reset_button_el.addEventListener("click", (e) => {
         for (const [param, details] of Object.entries(settings)) {
             const range_el = document.getElementById("range_" + param);
@@ -374,12 +375,9 @@ function make_menu() {
             details.v = details.default;
         }
     });
-    reset_button_el.innerText = "Reset to default";
-
-    const buttons_el = document.createElement("div");
-    buttons_el.id = "buttons"
+    
+    
     buttons_el.appendChild(hide_button_el);
     buttons_el.appendChild(reset_button_el);
-    menu_el.appendChild(buttons_el);
 }
 make_menu();
