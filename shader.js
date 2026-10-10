@@ -201,7 +201,8 @@ function render(gl, program, time) {
     gl.uniform1f(at('u_column_offset'), 2/12);
     gl.uniform1f(at('u_tilt'), 0.0);
     gl.uniform1f(at('u_edo'), 12);
-    gl.uniform1fv(at('u_playing_pitches'), playing_pitches.map((o) => o.pitch));
+    const pitches = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.pitch) : [-99];
+    gl.uniform1fv(at('u_playing_pitches'), pitches);
     gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -233,8 +234,8 @@ const init_audio = new Promise((resolve) =>
     })
 );
 
-import { Dough } from "/dough-synth/dough.js";
-const dough = new Dough({base: "/dough-synth/"});
+import { Dough } from "./dough-synth/dough.js";
+const dough = new Dough({base: "./dough-synth/"});
 
 async function touched_canvas(e) {
     await init_audio;
