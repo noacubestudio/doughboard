@@ -325,7 +325,6 @@ function make_range_div(value, name, min, max, step) {
     const range_el = document.createElement("input");
     const label_el = document.createElement("label");
     range_el.type = "range";
-    range_el.value = value;
     range_el.id = "range_" + name;
     range_el.name = name;
     label_el.innerHTML = name + ": " + value;
@@ -333,6 +332,7 @@ function make_range_div(value, name, min, max, step) {
     if (min) range_el.min = min;
     if (max) range_el.max = max;
     if (step) range_el.step = step;
+    range_el.value = value;
     range_el.addEventListener("input", (e) => {
         const v = e.target.value;
         settings[name].v = v;
