@@ -4,7 +4,8 @@ if (!gl) {
   throw new Error('WebGL2 is not available in this browser.');
 }
 
-let playing_pitches = [-99];
+// each is {pitch, pointer_id, group}
+let playing_pitches = [];
 
 const vertex_source = /*glsl*/`#version 300 es 
     in vec4 a_position;
@@ -26,11 +27,10 @@ const fragment_source = /*glsl*/`#version 300 es
 
     uniform float u_spiralize;
     uniform vec2 u_grid_size;
-    uniform float u_column_offset;
-    uniform float u_column_sharp;
+    uniform vec2 u_grid_sharp;
 
     uniform float u_edo;
-    uniform float u_snap_strength;
+    uniform float u_column_offset;
 
     out vec4 outColor;
 
@@ -83,10 +83,10 @@ const fragment_source = /*glsl*/`#version 300 es
 
         // warp grid in x to make column offset smooth or sharp
         float colx = uv.x;
-        if (u_column_sharp == 1.0) {
+        if (u_grid_sharp.x == 1.0) {
             colx = floor(colx) + 0.5;
-        } else if (u_column_sharp > 0.0) {
-            float half_s = u_column_sharp / 2.;
+        } else if (u_grid_sharp.x > 0.0) {
+            float half_s = u_grid_sharp.x / 2.;
             colx = floor(colx) + smoothstep(half_s, 1.-half_s, mod(colx, 1.0));
         }
         // apply offset per column
@@ -107,24 +107,24 @@ const fragment_source = /*glsl*/`#version 300 es
         // use blue channel to show active notes
         for (int i = 0; i < 16; i++) {
             if (u_playing_pitches_count == i) { break; }
-            float rect_height = max(0.25, u_snap_strength) / u_edo;
+            float rect_height = max(0.25, u_grid_sharp.y) / u_edo;
             if (abs(u_playing_pitches[i] - uv.y) < 0.5 * rect_height) {
                 col.b = 1.0;
             }
         }
 
         // show edo scale
-        if (u_snap_strength == 1.0) {
+        if (u_grid_sharp.y == 1.0) {
             col.r = floor(col.r * u_edo + 0.5) / u_edo;
-        } else if (u_snap_strength > 0.0) {
-            float half_s = u_snap_strength / 2.;
+        } else if (u_grid_sharp.y > 0.0) {
+            float half_s = u_grid_sharp.y / 2.;
             col.r *= u_edo;
             col.r = floor(col.r) + smoothstep(half_s, 1.-half_s, mod(col.r, 1.0));
             col.r /= u_edo;
         }
 
         // add centered dots on edo steps
-        float dotl = 2. - u_snap_strength;
+        float dotl = 2. - u_grid_sharp.y;
         vec2 step_uv = vec2(
             mod(uv.x + 0.5, 1.0) - 0.5, 
             (mod(uv.y * u_edo + 0.5, 1.0) - 0.5) * dotl
@@ -197,12 +197,11 @@ function render(gl, program, time) {
     gl.uniform1f(at('u_spiralize'), 0.0);
     gl.uniform2f(at('u_start_pos'), 0.5, 0.5);
     gl.uniform2f(at('u_grid_size'), 50, 600);
+    gl.uniform2f(at('u_grid_sharp'), 0.8, 0.6);
     gl.uniform1f(at('u_column_offset'), 2/12);
-    gl.uniform1f(at('u_column_sharp'), 0.8);
     gl.uniform1f(at('u_tilt'), 0.0);
     gl.uniform1f(at('u_edo'), 12);
-    gl.uniform1f(at('u_snap_strength'), 0.6);
-    gl.uniform1fv(at('u_playing_pitches'), playing_pitches);
+    gl.uniform1fv(at('u_playing_pitches'), playing_pitches.map((o) => o.pitch));
     gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -237,31 +236,34 @@ const init_audio = new Promise((resolve) =>
 import { Dough } from "/dough-synth/dough.js";
 const dough = new Dough({base: "/dough-synth/"});
 
-let is_down = false;
 async function touched_canvas(e) {
     await init_audio;
     if (!dough) {
         return;
     }
     e.preventDefault();
-    if (is_down) {
-        if (e.type == "pointerup" || e.type == "pointerout") is_down = false;
-    } else {
-        // wasn't down
-        if (e.type == "pointerdown") {
-            is_down = true;
-        } else {
-            return;
-        }
+
+    const p_id = e.pointerId ?? 0;
+    const p_index = playing_pitches.findIndex((o) => o.pointer_id == p_id);
+
+    if (e.type == "pointerup" || e.type == "pointerout") {
+        // remove existing
+        if (p_index == -1) return;
+        dough.evaluate({dough: "hush_group", group: playing_pitches[p_index].group});
+        playing_pitches.splice(p_index); 
+        return;
+    } else if (e.type == "pointermove") {
+        if (p_index == -1) return;
     }
 
-    if (!is_down) {
-        dough.evaluate({dough: "hush_group", group: 1});
-        dough.evaluate({dough: "hush_group", group: 2});
-        playing_pitches = [-99];
-        return;
+    const first_free = () => {
+        for (let i = 0; i < 16; i++) {
+            const group_index = playing_pitches.findIndex((o) => o.group == i);
+            if (group_index == -1) return i;
+        }
     }
-    
+    const group = (p_index >= 0) ? playing_pitches[p_index].group : first_free();
+
     // get the color at the cursor
     const x = e.clientX;
     const y = e.clientY;
@@ -272,28 +274,24 @@ async function touched_canvas(e) {
     // r is the octave. the calculation brings it in the desired range.
     // g is the specific note within the octave
     const pitch = (Math.round(g / 4) - 32) + (r / 255);
-    playing_pitches = [pitch, -2]; // -2 is for the temp bass note
 
     const octave_offset = -1; // sound only, doesn't affect storage
     const freq = 440 * (2 ** (pitch + octave_offset));
     //console.log(`pitch: ${pitch}, freq: ${freq}.`)
 
-    const duration = is_down ? 30.0 : 0.01;
-    dough.evaluatePath(`
-        /group/1/voices/1
-        /freq/${freq}/glide/0.1
-        /s/saw/vib/6/vibmod/0.05/phaser/0.5/phaserdepth/0.1
-        /duration/${duration}/attack/.02/release/.3
-        /delay/0.2
-        /lpf/7000
-    `)
-    dough.evaluatePath(`
-        /group/2/voices/1
-        /freq/${55}
-        /s/saw
-        /duration/${duration}/attack/.05/release/.3
-        /lpf/4000
-    `)
+    if (p_index == -1) {
+        // new
+        playing_pitches.push({pointer_id: p_id, pitch, group});
+    } else {
+        playing_pitches[p_index].pitch = pitch;
+    }
+
+    dough.evaluate({
+        dough: "play", group, voices: 1,
+        freq, glide: 0.1, lpf: 7000,
+        s: "saw", vib: 6, vibmod: 0.05, phaser: 0.5, phaserdepth: 0.1,
+        attack: .02, release: .3, delay: 0.2
+    });
 }
 canvas.addEventListener('pointerdown', touched_canvas);
 canvas.addEventListener('pointermove', touched_canvas);
