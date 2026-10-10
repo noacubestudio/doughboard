@@ -36,18 +36,22 @@
                 user-select: none;
             }
             #menu-list {
-                margin: 4px;
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-            }
-            #menu-list div {
-                display: flex;
+                margin: 4px 6px;
+                display: grid;
+                grid: auto-flow / auto auto;
                 gap: 4px;
             }
-            #menu label {
+            .label-group {
+                display: flex;
                 color: white;
-                min-width: 10em;
+                gap: 12px;
+            }
+            .label-param {
+                color: lightgray;
+                flex-grow: 1;
+            }
+            .label-value {
+                text-align: right;
             }
             #menu p {
                 margin: 2px 6px;

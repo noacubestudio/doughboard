@@ -8,17 +8,18 @@ if (!gl) {
 let playing_pitches = [];
 let audio_started = false;
 const settings = {
+    grid_size_x:   {label: "zoom (h)", v: 50, min: 20, max: 200},
+    grid_size_y:   {label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
+    grid_sharp_x:  {label: "sharp (h)", v: 0.8, min: 0.0, max: 1.0, step: 0.05},
+    grid_sharp_y:  {label: "sharp (v)", v: 0.6, min: 0.0, max: 1.0, step: 0.05},
     spiralize:     {v: 0.0, min: 0.0, max: 1.0},
-    start_pos_x:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    start_pos_y:   {v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    grid_size_x:   {v: 50, min: 20, max: 200},
-    grid_size_y:   {v: 600, min: 100, max: 1400, step: 5},
-    grid_sharp_x:  {v: 0.8, min: 0.0, max: 1.0, step: 0.05},
-    grid_sharp_y:  {v: 0.6, min: 0.0, max: 1.0, step: 0.05},
-    column_offset: {v: 2., min: 0.0, max: 12.0, step: 0.1},
-    tilt:          {v: 0.0, min: 0.0, max: 1.0, step: 0.01},
-    edo:           {v: 12, min: 1, max: 128},
-    origin_freq:   {v: 220, min: 55, max: 880},
+    column_offset: {label: "offset (v)", v: 2., min: 0.0, max: 12.0, step: 0.1},
+    edo:           {label: "EDO", v: 12, min: 1, max: 128},
+    tilt:          {label: "rotate", v: 0.0, min: 0.0, max: 1.0, step: 0.01},
+    start_pos_x:   {label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    start_pos_y:   {label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880},
+    gain:          {label: "gain", v: 0.5, min: 0.0, max: 1.0, step: 0.05},
     delay:         {v: 0.2, min: 0, max: 1, step: 0.05}
 }
 
@@ -310,7 +311,7 @@ async function touched_canvas(e) {
 
     dough.evaluate({
         dough: "play", group, voices: 1,
-        freq, glide: 0.1, lpf: 7000,
+        freq, glide: 0.1, gain: settings.gain.v, lpf: 7000,
         s: "saw", vib: 6, vibmod: 0.05, phaser: 0.5, phaserdepth: 0.1,
         attack: .02, release: .3, delay: settings.delay.v
     });
@@ -320,27 +321,36 @@ canvas.addEventListener('pointermove', touched_canvas);
 canvas.addEventListener('pointerup', touched_canvas);
 canvas.addEventListener('pointerout', touched_canvas);
 
-function make_range_div(value, name, min, max, step) {
-    const div_el = document.createElement("div");
+function add_range_els(parent_el, value, id, name, min, max, step) {
     const range_el = document.createElement("input");
-    const label_el = document.createElement("label");
     range_el.type = "range";
-    range_el.id = "range_" + name;
+    range_el.id = "range_" + id;
     range_el.name = name;
-    label_el.innerHTML = name + ": " + value;
-    label_el.id = "label_" + name;
     if (min) range_el.min = min;
     if (max) range_el.max = max;
     if (step) range_el.step = step;
     range_el.value = value;
+
+    const label_div_el = document.createElement("div");
+    const label_el = document.createElement("label");
+    const value_el = document.createElement("label");
+    label_el.innerHTML = name;
+    value_el.innerHTML = value;
+    label_div_el.appendChild(label_el);
+    label_div_el.appendChild(value_el);
+    label_el.classList.add("label-param");
+    value_el.classList.add("label-value");
+    value_el.id = "value_label_" + id;
+    label_div_el.classList.add("label-group");
+    
     range_el.addEventListener("input", (e) => {
         const v = e.target.value;
-        settings[name].v = v;
-        label_el.innerHTML = name + ": " + v;
+        settings[id].v = v;
+        value_el.innerHTML = v;
     });
-    div_el.appendChild(range_el);
-    div_el.appendChild(label_el);
-    return div_el;
+
+    parent_el.appendChild(label_div_el);
+    parent_el.appendChild(range_el);
 }
 
 let menu_shown = true;
@@ -351,8 +361,9 @@ function make_menu() {
 
     for (const [param, details] of Object.entries(settings)) {
         const {v, min, max, step} = details;
+        const name = details.label ?? param;
         details.default = v;
-        menu_list_el.appendChild(make_range_div(v, param, min, max, step));
+        add_range_els(menu_list_el, v, param, name, min, max, step);
     }
 
     const hide_button_el = document.createElement("button");
@@ -360,8 +371,9 @@ function make_menu() {
     hide_button_el.addEventListener("click", (e) => {
         menu_shown = !menu_shown;
         hide_button_el.innerText = menu_shown ? "hide" : "show";
-        menu_list_el.style.display = menu_shown ? "inherit" : "none";
         reset_button_el.style.display = menu_shown ? "inline-block" : "none";
+
+        menu_list_el.style.display = menu_shown ? "grid" : "none";
         about_text_el.style.display = menu_shown ? "inline" : "none";
     });
     const reset_button_el = document.createElement("button");
@@ -369,9 +381,9 @@ function make_menu() {
     reset_button_el.addEventListener("click", (e) => {
         for (const [param, details] of Object.entries(settings)) {
             const range_el = document.getElementById("range_" + param);
-            const label_el = document.getElementById("label_" + param);
+            const label_el = document.getElementById("value_label_" + param);
             range_el.value = details.default;
-            label_el.innerHTML = param + ": " + details.default;
+            label_el.innerHTML = details.default;
             details.v = details.default;
         }
     });
