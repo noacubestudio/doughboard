@@ -5,10 +5,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Doughboard</title>
         <style>
+            :root {
+                --main-bg-color: rgb(60, 50, 66)
+            }
             body {
                 margin: 0;
                 padding: 0;
                 overflow: hidden;
+                background-color: var(--main-bg-color);
             }
             canvas, canvas * {
                 touch-action: none; /* prevents gestures */
@@ -20,26 +24,34 @@
                 position: absolute;
                 margin: 2px;
                 padding: 3px;
-                bottom: 0;
+                top: 0;
                 left: 0;
                 background-color: #22222290;
-                border-radius: 16px;
+                border-radius: 13px;
                 display: flex;
                 flex-direction: column;
                 gap: 2px;
             }
             #menu * {
                 font-family: monospace;
-                font-size: large;
+                font-size: 17px;
+                touch-action: pan-y;
                 -webkit-touch-callout: none;
                 -webkit-user-select: none;
                 user-select: none;
             }
             #menu-list {
-                margin: 4px 6px;
+                padding: 4px 6px;
                 display: grid;
                 grid: auto-flow / auto auto;
                 gap: 4px;
+                overflow-y: scroll;
+                max-height: 75vw;
+            }
+            @media screen and (orientation: portrait) {
+                #menu-list {
+                    grid: auto-flow / auto;
+                }
             }
             .label-group {
                 display: flex;
@@ -54,23 +66,28 @@
                 text-align: right;
             }
             #menu p {
-                margin: 2px 6px;
+                margin: 4px 6px;
             }
             #menu p, #menu a {
                 color: lightgrey;
-                font-size: medium;
+                font-size: 15px;
             }
             #menu-buttons {
                 display: flex;
-                gap: 2px;
+                gap: 4px;
             }
             #menu-buttons button {
-                font-size: large;
+                font-size: inherit;
                 font-family: monospace;
                 border: none;
-                height: 26px;
-                border-radius: 13px;
+                height: 30px;
+                border-radius: 10px;
                 padding: 0px 8px;
+                background-color: #333;
+                color: white;
+            }
+            #menu-buttons button:hover, #menu-buttons button:active {
+                background-color: #444;
             }
         </style>
     </head>
@@ -78,12 +95,12 @@
         <canvas id="gl_canvas" width="0" height="0"></canvas>
         <script type="module" src="main.js"></script>
         <div id="menu">
+            <div id="menu-buttons"></div>
             <p id="intro_text">click canvas once to start audio.</p>
             <div id="menu-list"></div>
             <p id="about-text" style="margin-bottom: 8px !important;">
                 <a href="https://github.com/noacubestudio/doughboard/">view source</a>. made with <a href="https://dough.strudel.cc/">dough</a>
             </p>
-            <div id="menu-buttons"></div>
         </div>
     </body>
 </html>

@@ -109,6 +109,9 @@ canvas.addEventListener("pointermove", touched_canvas);
 canvas.addEventListener("pointerup", touched_canvas);
 canvas.addEventListener("pointerout", touched_canvas);
 
+// fix to allow scribble feature on iPadOS, or something. copied from another project. hope it does something useful.
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }); 
+
 
 // ui
 

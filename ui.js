@@ -52,7 +52,7 @@ export function make_menu(settings) {
     hide_button_el.innerText = "hide";
     hide_button_el.addEventListener("click", (e) => {
         menu_shown = !menu_shown;
-        hide_button_el.innerText = menu_shown ? "hide" : "show";
+        hide_button_el.innerText = menu_shown ? "hide" : "menu";
         reset_button_el.style.display = menu_shown ? "inline-block" : "none";
 
         menu_list_el.style.display = menu_shown ? "grid" : "none";
