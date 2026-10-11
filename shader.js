@@ -2,6 +2,9 @@ const canvas = document.getElementById('gl_canvas');
 const gl = canvas.getContext('webgl2', {preserveDrawingBuffer: true});
 if (!gl) { throw new Error('WebGL2 is not available in this browser.'); }
 
+const float_extension = gl.getExtension("EXT_color_buffer_float"); // needed for 16f data framebuffer
+if (!float_extension) { console.error("This device can't render to float textures.") }
+
 const settings = {
     grid_size_x:   {label: "zoom (h)", v: 50, min: 20, max: 200},
     grid_size_y:   {label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
@@ -122,12 +125,8 @@ const fragment_source = /*glsl*/`#version 300 es
             pitch_in_octave /= u_edo;
         }
 
-        // support 16 octaves with uv.y = 0 being in the middle of the range.
-        float normalized_pitch = (pitch_in_octave + floor(uv.y) + 8.) / 16.;
-        float data_r = (floor(normalized_pitch * 256.0) + 0.5) / 255.0;
-        float data_g = mod(normalized_pitch * 256.0, 1.);
-        outData = vec4(data_r, data_g, 0., 1.);
-
+        float output_pitch = pitch_in_octave + floor(uv.y);
+        outData = vec4(output_pitch, 0.0, 0.0, 1.0);
 
         float hightlight = 0.0;
         // highlight playing pitches
@@ -152,8 +151,8 @@ const fragment_source = /*glsl*/`#version 300 es
         if (u_time == 0.) {
             dim = 0.5;
         }
-
-        outDisplay = vec4(hsv2rgb(vec3(pitch_in_octave, hightlight * 0.1 + 0.7, (hightlight * 0.6 + 0.4) * dim)), 1.0);
+        float base_l = 0.5 * (uv.y / 16. + 0.5);
+        outDisplay = vec4(hsv2rgb(vec3(pitch_in_octave, hightlight * 0.1 + 0.7, (hightlight * 0.6 + base_l) * dim)), 1.0);
     }
 `;
 
@@ -225,7 +224,7 @@ function resize_canvas() {
     gl.bindTexture(gl.TEXTURE_2D, display_texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindTexture(gl.TEXTURE_2D, data_texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, canvas.width, canvas.height, 0, gl.RED, gl.HALF_FLOAT, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
 }
 window.addEventListener('resize', resize_canvas);
@@ -343,14 +342,17 @@ async function touched_canvas(e) {
     // get the color at the cursor
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.readBuffer(gl.COLOR_ATTACHMENT1);
+
     const x = e.clientX;
     const y = e.clientY;
-    const data = new Uint8Array(4);
-    gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    const steps_16bit = (data[0] << 8) | data[1]; 
-    const octaves = (steps_16bit / 65535) * 16 - 8; // assume 16 octaves total with the middle point of the range being the origin
+
+    const data = new Float32Array(4);
+    gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.FLOAT, data);
+
+    const octaves = data[0];
     let freq = settings.origin_freq.v * (2 ** octaves);
-    //console.log(`octaves: ${octaves}, freq: ${freq}.`)
+
+    console.log(`octaves: ${octaves}, freq: ${freq}.`)
 
     if (p_index == -1) {
         // new
