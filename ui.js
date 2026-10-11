@@ -1,15 +1,24 @@
 function add_range_els(parent_el, id, details) {
-    const {v: value, min, max, step} = details;
+    const {v: value, min, max, step, pow, round} = details;
     const name = details.label ?? id;
 
     const range_el = document.createElement("input");
     range_el.type = "range";
     range_el.id = "range_" + id;
     range_el.name = name;
-    if (min) range_el.min = min;
-    if (max) range_el.max = max;
-    if (step) range_el.step = step;
-    range_el.value = value;
+    if (!pow) {
+        if (min) range_el.min = min;
+        if (max) range_el.max = max;
+        if (step) range_el.step = step;
+        range_el.value = value;
+    } else {
+        range_el.min = 0;
+        range_el.max = 1;
+        range_el.step = 0.0001;
+        const norm_value = (value - min) / (max - min)
+        range_el.value = Math.sqrt(norm_value);
+    }
+    
 
     const label_div_el = document.createElement("div");
     const label_el = document.createElement("label");
@@ -24,7 +33,14 @@ function add_range_els(parent_el, id, details) {
     label_div_el.classList.add("label-group");
     
     range_el.addEventListener("input", (e) => {
-        const new_value = e.target.value;
+        let new_value = e.target.value;
+        if (pow) {
+            new_value = min + (new_value ** 2) * (max-min);
+        }
+        if (pow || round) {
+            const factor = round ?? 100;
+            new_value = Math.round(new_value * factor) / factor;
+        }
         details.v = new_value;
         value_el.innerHTML = new_value;
     });

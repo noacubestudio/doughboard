@@ -13,9 +13,12 @@ const settings = {
     tilt:          {label: "rotate", v: 0.0, min: 0.0, max: 1.0, step: 0.01},
     start_pos_x:   {label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     start_pos_y:   {label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880},
-    gain:          {label: "gain", v: 0.5, min: 0.0, max: 1.0, step: 0.05},
-    delay:         {v: 0.2, min: 0, max: 1, step: 0.05}
+    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880, pow: true, round: 1},
+    gain:          {v: 0.5, min: 0.0, max: 1.0, pow: true},
+    attack:        {v: 0.02, min: 0.01, max: 0.5, pow: true},
+    release:       {v: 0.3, min: 0, max: 2, pow: true},
+    delay:         {v: 0.2, min: 0, max: 1, pow: true},
+    reverb:        {v: 0.0, min: 0, max: 1, pow: true}
 }
 
 let playing_pitches = []; // [{octaves, pointer_id, group}, ...]
@@ -44,7 +47,7 @@ requestAnimationFrame(animate);
 const dough = new Dough({base: "./dough-synth/"});
 
 const init_audio = new Promise((resolve) => {
-    const intro_text_el = document.getElementById("intro_text");
+    const intro_text_el = document.getElementById("intro-text");
     document.addEventListener("click", function init() {
         const audio_context = new AudioContext();
         resolve(audio_context);
@@ -99,9 +102,16 @@ async function touched_canvas(e) {
     freq = Math.min(freq, 20000);
     dough.evaluate({
         dough: "play", group, voices: 1,
-        freq, glide: 0.1, gain: settings.gain.v, lpf: 7000,
-        s: "saw", vib: 6, vibmod: 0.05, phaser: 0.5, phaserdepth: 0.1,
-        attack: .02, release: .3, delay: settings.delay.v
+        freq, glide: 0.1, 
+        gain: settings.gain.v, 
+        lpf: 7000,
+        s: "saw", 
+        vib: 6, vibmod: 0.05, 
+        phaser: 0.5, phaserdepth: 0.1,
+        attack: settings.attack.v, 
+        release: settings.release.v, 
+        delay: settings.delay.v,
+        verb: settings.reverb.v
     });
 }
 canvas.addEventListener("pointerdown", touched_canvas);

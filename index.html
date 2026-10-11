@@ -20,6 +20,16 @@
                 -webkit-user-select: none;
                 user-select: none;
             }
+            #intro-text {
+                display: block;
+                position: absolute;
+                top: 50vh;
+                left: 50vw;
+                color: white;
+                font-size: 15px;
+                font-family: monospace;
+                transform: translate(-50%, -50%);
+            }
             #menu {
                 position: absolute;
                 margin: 2px;
@@ -46,7 +56,7 @@
                 grid: auto-flow / auto auto;
                 gap: 4px;
                 overflow-y: scroll;
-                max-height: 75vw;
+                max-height: 60vh;
             }
             @media screen and (orientation: portrait) {
                 #menu-list {
@@ -64,6 +74,7 @@
             }
             .label-value {
                 text-align: right;
+                min-width: 4ch;
             }
             #menu p {
                 margin: 4px 6px;
@@ -96,11 +107,11 @@
         <script type="module" src="main.js"></script>
         <div id="menu">
             <div id="menu-buttons"></div>
-            <p id="intro_text">click canvas once to start audio.</p>
             <div id="menu-list"></div>
             <p id="about-text" style="margin-bottom: 8px !important;">
-                <a href="https://github.com/noacubestudio/doughboard/">view source</a>. made with <a href="https://dough.strudel.cc/">dough</a>
+                made by <a href="http://noacubestudio.github.io">noa</a>, sound from <a href="https://dough.strudel.cc/">dough</a>, <a href="https://github.com/noacubestudio/doughboard/">view source</a> 
             </p>
         </div>
+        <p id="intro-text">click canvas to start audio.</p>
     </body>
 </html>
