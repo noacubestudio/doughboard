@@ -1,12 +1,7 @@
 const canvas = document.getElementById('gl_canvas');
 const gl = canvas.getContext('webgl2', {preserveDrawingBuffer: true});
-if (!gl) {
-  throw new Error('WebGL2 is not available in this browser.');
-}
+if (!gl) { throw new Error('WebGL2 is not available in this browser.'); }
 
-// each is {pitch, pointer_id, group}
-let playing_pitches = [];
-let audio_started = false;
 const settings = {
     grid_size_x:   {label: "zoom (h)", v: 50, min: 20, max: 200},
     grid_size_y:   {label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
@@ -24,8 +19,11 @@ const settings = {
 }
 
 const vertex_source = /*glsl*/`#version 300 es 
-    in vec4 a_position;
+    layout(location = 0) in vec4 a_position;
+    out vec2 v_tex_coord;
+
     void main() {
+        v_tex_coord = a_position.xy * 0.5 + 0.5;
         gl_Position = a_position;
     }
 `;
@@ -48,7 +46,8 @@ const fragment_source = /*glsl*/`#version 300 es
     uniform float u_edo;
     uniform float u_column_offset;
 
-    out vec4 outColor;
+    layout(location = 0) out vec4 outDisplay;
+    layout(location = 1) out vec4 outData;
 
     #define PI 3.1415926538
 
@@ -84,20 +83,22 @@ const fragment_source = /*glsl*/`#version 300 es
         return uv;
     }
 
-    // // All components are in the range [0…1], including hue.
-    // vec3 hsv2rgb(vec3 c)
-    // {
-    //     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    //     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    //     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-    // }
+    vec3 hsv2rgb(vec3 c) { // for range 0-1
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
 
     void main() {
         // start with actual pixel scale, 1.0 = 1px., at start pos which is in normal 0-1 uv space.
         // half pixel offset for alignment, not sure if that makes sense.
         vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
 
-        uv = mix(gridize(uv), spiralize(uv), u_spiralize);
+        if (u_spiralize == 1.) {
+            uv = spiralize(uv);
+        } else {
+            uv = gridize(uv);
+        }
 
         // warp grid in x to make column offset smooth or sharp
         float colx = uv.x;
@@ -155,11 +156,23 @@ const fragment_source = /*glsl*/`#version 300 es
             col.b = 1. - col.b;
         }
 
-        //col = hsv2rgb(col.xzy);
-
-        outColor = vec4(col.rgb, 1.0);
+        outData = vec4(col.rgb, 1.0);
+        outDisplay = vec4(hsv2rgb(vec3(col.x, col.z * 0.1 + 0.7, col.z * 0.6 + 0.4)), 1.0);
     }
-`
+`;
+
+const blit_fragment_source = /*glsl*/`#version 300 es
+    precision highp float;
+
+    in vec2 v_tex_coord;
+    uniform sampler2D u_screen_texture;
+
+    out vec4 outColor;
+
+    void main() {
+        outColor = texture(u_screen_texture, v_tex_coord);
+    }
+`;
 
 function create_shader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -186,61 +199,105 @@ function create_program(gl, vertex_shader, fragment_shader) {
     return program;
 }
 
-function setup_shader(gl, vertex_source, fragment_source) {
+let shader_program, blit_program;
+function setup_shaders() {
+    // compile the shaders
     const vertex_shader = create_shader(gl, gl.VERTEX_SHADER, vertex_source);
     const fragment_shader = create_shader(gl, gl.FRAGMENT_SHADER, fragment_source);
-    const program = create_program(gl, vertex_shader, fragment_shader);
+    const blit_fragment_shader = create_shader(gl, gl.FRAGMENT_SHADER, blit_fragment_source);
+
+    shader_program = create_program(gl, vertex_shader, fragment_shader);
+    blit_program = create_program(gl, vertex_shader, blit_fragment_shader);
 
     const position_buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, position_buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     
-    const position_attrib_location = gl.getAttribLocation(program, 'a_position');
-    gl.enableVertexAttribArray(position_attrib_location);
-    gl.vertexAttribPointer(position_attrib_location, 2, gl.FLOAT, false, 0, 0);
-
-    return program;
+    // match layout(location = 0) in vertex shader
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 }
+setup_shaders();
 
-function render(gl, program, time) {
-    gl.useProgram(program);
-
-    function at(string) {
-        return gl.getUniformLocation(program, string);
-    }
-
-    gl.uniform2f(at('u_resolution'), gl.canvas.width, gl.canvas.height);
-    gl.uniform1f(at('u_time'), audio_started ? time * 0.001 : 0);
-
-    const pitches = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.pitch) : [-99];
-    gl.uniform1fv(at('u_playing_pitches'), pitches);
-    gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
-
-    gl.uniform1f(at('u_spiralize'), settings.spiralize.v);
-    gl.uniform2f(at('u_start_pos'), settings.start_pos_x.v, settings.start_pos_y.v);
-    gl.uniform2f(at('u_grid_size'), settings.grid_size_x.v, settings.grid_size_y.v);
-    gl.uniform2f(at('u_grid_sharp'), settings.grid_sharp_x.v, settings.grid_sharp_y.v);
-    gl.uniform1f(at('u_column_offset'), settings.column_offset.v / 12);
-    gl.uniform1f(at('u_tilt'), settings.tilt.v);
-    gl.uniform1f(at('u_edo'), settings.edo.v);
-
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-}
-
-
+const display_texture = gl.createTexture();
+const data_texture = gl.createTexture();
 function resize_canvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
+
+    gl.bindTexture(gl.TEXTURE_2D, display_texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, data_texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 }
 window.addEventListener('resize', resize_canvas);
 resize_canvas();
 
+const fbo = gl.createFramebuffer();
+function setup_fbo() {
+    gl.bindTexture(gl.TEXTURE_2D, display_texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, data_texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
-const shader_program = setup_shader(gl, vertex_source, fragment_source);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+    // match fragment shader locations
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, display_texture, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, data_texture, 0);
+    
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+        console.error('Framebuffer incomplete:', status);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+setup_fbo();
+
+// each is {pitch, pointer_id, group}
+let playing_pitches = [];
+let audio_started = false;
+function set_uniforms(program, time) {
+    function at(string) { return gl.getUniformLocation(program, string); }
+
+    const pitches = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.pitch) : [-99];
+
+    gl.uniform2f(at('u_resolution')           , gl.canvas.width, gl.canvas.height);
+    gl.uniform1f(at('u_time')                 , audio_started ? time * 0.001 : 0);
+    gl.uniform1fv(at('u_playing_pitches')     , pitches);
+    gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
+    gl.uniform1f(at('u_spiralize')            , settings.spiralize.v);
+    gl.uniform2f(at('u_start_pos')            , settings.start_pos_x.v, settings.start_pos_y.v);
+    gl.uniform2f(at('u_grid_size')            , settings.grid_size_x.v, settings.grid_size_y.v);
+    gl.uniform2f(at('u_grid_sharp')           , settings.grid_sharp_x.v, settings.grid_sharp_y.v);
+    gl.uniform1f(at('u_column_offset')        , settings.column_offset.v / 12);
+    gl.uniform1f(at('u_tilt')                 , settings.tilt.v);
+    gl.uniform1f(at('u_edo')                  , settings.edo.v);
+}
+
+function render(gl, time) {
+    // draw both textures
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.useProgram(shader_program);
+    set_uniforms(shader_program, time);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // assume no VAO
+
+    // blit display texture to screen
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(blit_program);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, display_texture);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
 function animate(time) {
-    render(gl, shader_program, time);
+    render(gl, time);
     requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -289,11 +346,13 @@ async function touched_canvas(e) {
     const group = (p_index >= 0) ? playing_pitches[p_index].group : first_free();
 
     // get the color at the cursor
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.readBuffer(gl.COLOR_ATTACHMENT1);
     const x = e.clientX;
     const y = e.clientY;
     const data = new Uint8Array(4);
     gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    const [r, g, b, a] = data;
+    const [r, g, _b, _a] = data;
 
     // r is the octave. the calculation brings it in the desired range.
     // g is the specific note within the octave
