@@ -101,63 +101,59 @@ const fragment_source = /*glsl*/`#version 300 es
         }
 
         // warp grid in x to make column offset smooth or sharp
-        float colx = uv.x;
+        float column_x = uv.x;
         if (u_grid_sharp.x == 1.0) {
-            colx = floor(colx  + 0.5);
+            column_x = floor(column_x + 0.5);
         } else if (u_grid_sharp.x > 0.0) {
             float half_s = u_grid_sharp.x / 2.;
-            colx = floor(colx) + smoothstep(half_s, 1.-half_s, mod(colx, 1.0));
+            column_x = floor(column_x) + smoothstep(half_s, 1.-half_s, mod(column_x, 1.0));
         }
         // apply offset per column
-        uv.y += colx * u_column_offset;
+        uv.y += column_x * u_column_offset;
 
-        // split part >1 and <1 into separate color channels.
-        // this is to make the output image be able to display many different pitches.
-        float g_stepsize = 1./64.; // how much to change the second color channel by
-        vec3 col = vec3(
-            // r = pitch
-            mod(uv.y, 1.0),
-            // g = octave steps            
-            0.5 + floor(uv.y) * g_stepsize,
-            // b = visual only stuff
-            0.0
-        );
+        float pitch_in_octave = mod(uv.y, 1.0);
+        // separate octave into steps
+        if (u_grid_sharp.y == 1.0) {
+            pitch_in_octave = floor(pitch_in_octave * u_edo + 0.5) / u_edo;
+        } else if (u_grid_sharp.y > 0.0) {
+            float half_s = u_grid_sharp.y / 2.;
+            pitch_in_octave *= u_edo;
+            pitch_in_octave = floor(pitch_in_octave) + smoothstep(half_s, 1.-half_s, mod(pitch_in_octave, 1.0));
+            pitch_in_octave /= u_edo;
+        }
 
-        // use blue channel to show active notes
+        // support 16 octaves with uv.y = 0 being in the middle of the range.
+        float normalized_pitch = (pitch_in_octave + floor(uv.y) + 8.) / 16.;
+        float data_r = (floor(normalized_pitch * 256.0) + 0.5) / 255.0;
+        float data_g = mod(normalized_pitch * 256.0, 1.);
+        outData = vec4(data_r, data_g, 0., 1.);
+
+
+        float hightlight = 0.0;
+        // highlight playing pitches
         for (int i = 0; i < 16; i++) {
             if (u_playing_pitches_count == i) { break; }
             float rect_height = max(0.25, u_grid_sharp.y) / u_edo;
             if (abs(u_playing_pitches[i] - uv.y) < 0.5 * rect_height) {
-                col.b = 1.0;
+                hightlight = 1.0;
             }
         }
-
-        // show edo scale
-        if (u_grid_sharp.y == 1.0) {
-            col.r = floor(col.r * u_edo + 0.5) / u_edo;
-        } else if (u_grid_sharp.y > 0.0) {
-            float half_s = u_grid_sharp.y / 2.;
-            col.r *= u_edo;
-            col.r = floor(col.r) + smoothstep(half_s, 1.-half_s, mod(col.r, 1.0));
-            col.r /= u_edo;
-        }
-
-        // add centered dots on edo steps
+        // highlight edo steps with centered dots
         float dotl = 2. - u_grid_sharp.y;
         vec2 step_uv = vec2(
             mod(uv.x + 0.5, 1.0) - 0.5, 
             (mod(uv.y * u_edo + 0.5, 1.0) - 0.5) * dotl
         );
         float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
-        col.b = max(col.b, 1. - smoothstep(0.0, 1.0, dot_dist));
+        hightlight = max(hightlight, 1. - smoothstep(0.0, 1.0, dot_dist));
 
         // not initiated yet, show that somehow.
+        float dim = 1.;
         if (u_time == 0.) {
-            col.b = 1. - col.b;
+            dim = 0.5;
         }
 
-        outData = vec4(col.rgb, 1.0);
-        outDisplay = vec4(hsv2rgb(vec3(col.x, col.z * 0.1 + 0.7, col.z * 0.6 + 0.4)), 1.0);
+        outDisplay = vec4(hsv2rgb(vec3(pitch_in_octave, hightlight * 0.1 + 0.7, (hightlight * 0.6 + 0.4) * dim)), 1.0);
     }
 `;
 
@@ -257,17 +253,17 @@ function setup_fbo() {
 }
 setup_fbo();
 
-// each is {pitch, pointer_id, group}
+// each is {octaves, pointer_id, group}
 let playing_pitches = [];
 let audio_started = false;
 function set_uniforms(program, time) {
     function at(string) { return gl.getUniformLocation(program, string); }
 
-    const pitches = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.pitch) : [-99];
+    const pitches_in_octaves = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.octaves) : [-99];
 
     gl.uniform2f(at('u_resolution')           , gl.canvas.width, gl.canvas.height);
     gl.uniform1f(at('u_time')                 , audio_started ? time * 0.001 : 0);
-    gl.uniform1fv(at('u_playing_pitches')     , pitches);
+    gl.uniform1fv(at('u_playing_pitches')     , pitches_in_octaves);
     gl.uniform1i(at('u_playing_pitches_count'), playing_pitches.length);
     gl.uniform1f(at('u_spiralize')            , settings.spiralize.v);
     gl.uniform2f(at('u_start_pos')            , settings.start_pos_x.v, settings.start_pos_y.v);
@@ -306,7 +302,6 @@ const intro_text_el = document.getElementById("intro_text");
 const init_audio = new Promise((resolve) =>
     document.addEventListener("click", function init() {
         const audio_context = new AudioContext();
-        // possibly hide a prompt here
         resolve(audio_context);
         audio_started = true;
         intro_text_el.style.display = "none";
@@ -352,22 +347,19 @@ async function touched_canvas(e) {
     const y = e.clientY;
     const data = new Uint8Array(4);
     gl.readPixels(x, canvas.height - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    const [r, g, _b, _a] = data;
-
-    // r is the octave. the calculation brings it in the desired range.
-    // g is the specific note within the octave
-    const pitch = (Math.round(g / 4) - 32) + (r / 255);
-
-    const freq = settings.origin_freq.v * (2 ** pitch);
-    //console.log(`pitch: ${pitch}, freq: ${freq}.`)
+    const steps_16bit = (data[0] << 8) | data[1]; 
+    const octaves = (steps_16bit / 65535) * 16 - 8; // assume 16 octaves total with the middle point of the range being the origin
+    let freq = settings.origin_freq.v * (2 ** octaves);
+    //console.log(`octaves: ${octaves}, freq: ${freq}.`)
 
     if (p_index == -1) {
         // new
-        playing_pitches.push({pointer_id: p_id, pitch, group});
+        playing_pitches.push({pointer_id: p_id, octaves, group});
     } else {
-        playing_pitches[p_index].pitch = pitch;
+        playing_pitches[p_index].octaves = octaves;
     }
 
+    freq = Math.min(freq, 20000);
     dough.evaluate({
         dough: "play", group, voices: 1,
         freq, glide: 0.1, gain: settings.gain.v, lpf: 7000,
