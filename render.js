@@ -1,3 +1,5 @@
+import {okhsv_okhsl_conversion_source} from "./color-conversion.js";
+
 let gl, shader_program, blit_program, display_texture, data_texture, fbo;
 
 const vertex_source = /*glsl*/`#version 300 es 
@@ -71,6 +73,8 @@ const fragment_source = /*glsl*/`#version 300 es
         return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
     }
 
+    ${okhsv_okhsl_conversion_source}
+
     void main() {
         // start with actual pixel scale, 1.0 = 1px., at start pos which is in normal 0-1 uv space.
         // half pixel offset for alignment, not sure if that makes sense.
@@ -130,8 +134,11 @@ const fragment_source = /*glsl*/`#version 300 es
         if (u_time == 0.) {
             dim = 0.5;
         }
-        float base_l = 0.5 * (uv.y / 16. + 0.5);
-        outDisplay = vec4(hsv2rgb(vec3(pitch_in_octave, hightlight * 0.1 + 0.7, (hightlight * 0.6 + base_l) * dim)), 1.0);
+        float base_l = 0.4 * (uv.y / 16. + 0.5);
+        float h = pitch_in_octave + 0.05;
+        float s = hightlight * 0.3 + 0.7;
+        float l = clamp((hightlight * 0.5 + base_l) * dim, 0.0, 1.0);
+        outDisplay = vec4(okhsl_to_srgb(vec3(h, s, l)), 1.0);
     }
 `;
 
