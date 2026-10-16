@@ -156,10 +156,10 @@ const blit_fragment_source = /*glsl*/`#version 300 es
 `;
 
 export function setup_rendering(canvas) {
-    gl = canvas.getContext("webgl2", {preserveDrawingBuffer: true});
+    gl = canvas.getContext("webgl2", {});
     if (!gl) { throw new Error("WebGL2 is not available in this browser."); }
 
-    const float_extension = gl.getExtension("EXT_color_buffer_float"); // needed for 16f data framebuffer
+    const float_extension = gl.getExtension("EXT_color_buffer_float"); // needed for 32f data framebuffer
     if (!float_extension) { console.error("This device can't render to float textures."); }
 
     // 1. setup shaders
@@ -238,7 +238,7 @@ export function resize_canvas(canvas, w, h) {
     gl.bindTexture(gl.TEXTURE_2D, display_texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.bindTexture(gl.TEXTURE_2D, data_texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, canvas.width, canvas.height, 0, gl.RED, gl.HALF_FLOAT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
@@ -282,6 +282,6 @@ function set_uniforms(program, time, settings, playing_pitches) {
     gl.uniform2f(at("u_grid_size")            , settings.grid_size_x.v, settings.grid_size_y.v);
     gl.uniform2f(at("u_grid_sharp")           , settings.grid_sharp_x.v, settings.grid_sharp_y.v);
     gl.uniform1f(at("u_column_offset")        , settings.column_offset.v / 12);
-    gl.uniform1f(at("u_tilt")                 , settings.tilt.v);
+    gl.uniform1f(at("u_tilt")                 , settings.tilt.v / 360);
     gl.uniform1f(at("u_edo")                  , settings.edo.v);
 }

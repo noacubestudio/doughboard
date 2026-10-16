@@ -10,7 +10,7 @@ const settings = {
     spiralize:     {v: 0.0, min: 0.0, max: 1.0},
     column_offset: {label: "offset (v)", v: 2., min: 0.0, max: 12.0, step: 0.1},
     edo:           {label: "EDO", v: 12, min: 1, max: 128},
-    tilt:          {label: "rotate", v: 0.0, min: 0.0, max: 1.0, step: 0.01},
+    tilt:          {label: "rotate", v: 0, min: 0, max: 360, step: 1},
     start_pos_x:   {label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     start_pos_y:   {label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880, pow: true, round: 1},
