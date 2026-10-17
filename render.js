@@ -271,7 +271,7 @@ export function render(time, settings, playing_pitches, audio_started) {
 function set_uniforms(program, time, settings, playing_pitches) {
     function at(string) { return gl.getUniformLocation(program, string); }
 
-    const pitches_in_octaves = (playing_pitches.length > 0) ? playing_pitches.map((o) => o.octaves) : [-99];
+    const pitches_in_octaves = (playing_pitches.length > 0) ? playing_pitches.map((voice) => voice.octaves) : [-99];
 
     gl.uniform2f(at("u_resolution")           , gl.canvas.width, gl.canvas.height);
     gl.uniform1f(at("u_time")                 , time);

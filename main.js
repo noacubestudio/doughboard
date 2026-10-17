@@ -23,6 +23,7 @@ const settings = {
 
 let playing_pitches = []; // [{last_event, group, octaves}, ...]
 let audio_started = false;
+let pending_refresh_all_pitches = false;
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -37,6 +38,19 @@ window.addEventListener("resize", () => {
 
 function animate(time) {
     Render.render(time, settings, playing_pitches, audio_started);
+    if (pending_refresh_all_pitches) {
+        pending_refresh_all_pitches = false;
+
+        playing_pitches.forEach(({last_event, group}, index) => {
+            const x = last_event.clientX;
+            const y = canvas.height - last_event.clientY;
+            const rgba = Render.get_pixel_float_rgba(x, y); // red channel is float value where 1. = 1 octave
+            const octaves = rgba[0];
+
+            playing_pitches[index].octaves = octaves;
+            play_voice(group, octaves);
+        });
+    }
     requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -139,13 +153,6 @@ document.addEventListener("changed_settings", (e) => {
         });
         return;
     }
-    
-    playing_pitches.forEach(({last_event, group}) => {
-        // get color again
-        const x = last_event.clientX;
-        const y = canvas.height - last_event.clientY;
-        const rgba = Render.get_pixel_float_rgba(x, y); // red channel is float value where 1. = 1 octave
-        const octaves = rgba[0];
-        play_voice(group, octaves);
-    });
+    // queue for next animation frame, when sliders have had an effect
+    pending_refresh_all_pitches = true;
 });
