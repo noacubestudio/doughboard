@@ -111,13 +111,16 @@ const fragment_source = /*glsl*/`#version 300 es
         float output_pitch = pitch_in_octave + floor(uv.y);
         outData = vec4(output_pitch, 0.0, 0.0, 1.0);
 
-        float hightlight = 0.0;
+        float highlight = 0.0;
         // highlight playing pitches
         for (int i = 0; i < 16; i++) {
             if (u_playing_pitches_count == i) { break; }
             float rect_height = max(0.25, u_grid_sharp.y) / u_edo;
-            if (abs(u_playing_pitches[i] - uv.y) < 0.5 * rect_height) {
-                hightlight = 1.0;
+            float pitch_dist = u_playing_pitches[i] - uv.y;
+            if (abs(pitch_dist) < 0.5 * rect_height) {
+                highlight = 1.0;
+            } else if (mod(pitch_dist + 0.5 * rect_height, 1.) < rect_height) { 
+                highlight = min(1., highlight += 0.12);
             }
         }
         // highlight edo steps with centered dots
@@ -127,7 +130,7 @@ const fragment_source = /*glsl*/`#version 300 es
             (mod(uv.y * u_edo + 0.5, 1.0) - 0.5) * dotl
         );
         float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
-        hightlight = max(hightlight, 1. - smoothstep(0.0, 1.0, dot_dist));
+        highlight = max(highlight, 1. - smoothstep(0.0, 1.0, dot_dist));
 
         // not initiated yet, show that somehow.
         float dim = 1.;
@@ -136,8 +139,8 @@ const fragment_source = /*glsl*/`#version 300 es
         }
         float base_l = 0.4 * (uv.y / 16. + 0.5);
         float h = pitch_in_octave + 0.05;
-        float s = hightlight * 0.3 + 0.7;
-        float l = clamp((hightlight * 0.5 + base_l) * dim, 0.0, 1.0);
+        float s = highlight * 0.3 + 0.7;
+        float l = clamp((highlight * 0.5 + base_l) * dim, 0.0, 1.0);
         outDisplay = vec4(okhsl_to_srgb(vec3(h, s, l)), 1.0);
     }
 `;
