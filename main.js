@@ -13,15 +13,15 @@ const settings = {
     tilt:          {label: "rotate", v: 0, min: 0, max: 360, step: 1},
     start_pos_x:   {label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
     start_pos_y:   {label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880, pow: true, round: 1},
-    gain:          {v: 0.5, min: 0.0, max: 1.0, pow: true},
-    attack:        {v: 0.02, min: 0.01, max: 0.5, pow: true},
-    release:       {v: 0.3, min: 0, max: 2, pow: true},
-    delay:         {v: 0.2, min: 0, max: 1, pow: true},
-    reverb:        {v: 0.0, min: 0, max: 1, pow: true}
+    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880, pow: true, round: 1, sound_setting: true},
+    gain:          {v: 0.5, min: 0.0, max: 1.0, pow: true, sound_setting: true},
+    attack:        {v: 0.02, min: 0.01, max: 0.5, pow: true, sound_setting: true},
+    release:       {v: 0.3, min: 0, max: 2, pow: true, sound_setting: true},
+    delay:         {v: 0.2, min: 0, max: 1, pow: true, sound_setting: true},
+    reverb:        {v: 0.0, min: 0, max: 1, pow: true, sound_setting: true}
 }
 
-let playing_pitches = []; // [{octaves, pointer_id, group}, ...]
+let playing_pitches = []; // [{last_event, group, octaves}, ...]
 let audio_started = false;
 
 const canvas = document.getElementById("gl_canvas");
@@ -57,47 +57,9 @@ const init_audio = new Promise((resolve) => {
     });
 });
 
-async function touched_canvas(e) {
-    await init_audio;
-    if (!dough) return;
-    e.preventDefault();
-
-    const p_id = e.pointerId ?? 0;
-    const p_index = playing_pitches.findIndex((o) => o.pointer_id == p_id);
-
-    if (e.type == "pointerup" || e.type == "pointerout") {
-        // remove existing
-        if (p_index == -1) return;
-        dough.evaluate({dough: "hush_group", group: playing_pitches[p_index].group});
-        playing_pitches.splice(p_index, 1); 
-        return;
-    } else if (e.type == "pointermove") {
-        if (p_index == -1) return;
-    }
-
-    const first_free = () => {
-        for (let i = 0; i < 16; i++) {
-            const group_index = playing_pitches.findIndex((o) => o.group == i);
-            if (group_index == -1) return i;
-        }
-    }
-    const group = (p_index >= 0) ? playing_pitches[p_index].group : first_free();
-
-    // get the color at the cursor
-    const x = e.clientX;
-    const y = canvas.height - e.clientY;
-    const rgba = Render.get_pixel_float_rgba(x, y); // red channel is 16f float where 1. = 1 octave
-    const octaves = rgba[0];
+function play_voice(group, octaves) {
     let freq = settings.origin_freq.v * (2 ** octaves);
-
     //console.log(`octaves: ${octaves}, freq: ${freq}.`)
-
-    if (p_index == -1) {
-        // new
-        playing_pitches.push({pointer_id: p_id, octaves, group});
-    } else {
-        playing_pitches[p_index].octaves = octaves;
-    }
 
     freq = Math.min(freq, 20000);
     dough.evaluate({
@@ -114,6 +76,48 @@ async function touched_canvas(e) {
         verb: settings.reverb.v
     });
 }
+
+async function touched_canvas(e) {
+    await init_audio;
+    if (!dough) return;
+    e.preventDefault();
+
+    const existing_index = playing_pitches.findIndex((voice) => voice.last_event.pointerId === e.pointerId);
+
+    if (e.type == "pointerup" || e.type == "pointerout") {
+        // remove existing
+        if (existing_index == -1) return;
+        dough.evaluate({dough: "hush_group", group: playing_pitches[existing_index].group});
+        playing_pitches.splice(existing_index, 1); 
+        return;
+    } else if (e.type == "pointermove") {
+        if (existing_index == -1) return;
+    }
+
+    const first_free = () => {
+        for (let i = 0; i < 16; i++) {
+            const group_index = playing_pitches.findIndex((o) => o.group == i);
+            if (group_index == -1) return i;
+        }
+    }
+    const group = (existing_index >= 0) ? playing_pitches[existing_index].group : first_free();
+
+    // get the color at the cursor
+    const x = e.clientX;
+    const y = canvas.height - e.clientY;
+    const rgba = Render.get_pixel_float_rgba(x, y); // red channel is float value where 1. = 1 octave
+    const octaves = rgba[0];
+
+    // add or update the note
+    if (existing_index == -1) {
+        playing_pitches.push({last_event: e, group, octaves});
+    } else {
+        playing_pitches[existing_index].octaves = octaves;
+        playing_pitches[existing_index].last_event = e;
+    }
+
+    play_voice(group, octaves);
+}
 canvas.addEventListener("pointerdown", touched_canvas);
 canvas.addEventListener("pointermove", touched_canvas);
 canvas.addEventListener("pointerup", touched_canvas);
@@ -126,3 +130,22 @@ canvas.addEventListener('touchmove', (e) => { e.preventDefault(); });
 // ui
 
 UI.make_menu(settings);
+
+document.addEventListener("changed_settings", (e) => {
+    if (!dough) return;
+    if (e.detail.sound_only) {
+        playing_pitches.forEach(({group, octaves}) => {
+            play_voice(group, octaves);
+        });
+        return;
+    }
+    
+    playing_pitches.forEach(({last_event, group}) => {
+        // get color again
+        const x = last_event.clientX;
+        const y = canvas.height - last_event.clientY;
+        const rgba = Render.get_pixel_float_rgba(x, y); // red channel is float value where 1. = 1 octave
+        const octaves = rgba[0];
+        play_voice(group, octaves);
+    });
+});

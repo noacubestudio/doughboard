@@ -1,3 +1,6 @@
+const changed_settings = new CustomEvent("changed_settings", {detail: {sound_only: false}});
+const changed_sound = new CustomEvent("changed_settings", {detail: {sound_only: true}});
+
 function add_range_els(parent_el, id, details) {
     const {v: value, min, max, step, pow, round} = details;
     const name = details.label ?? id;
@@ -43,6 +46,7 @@ function add_range_els(parent_el, id, details) {
         }
         details.v = new_value;
         value_el.innerHTML = new_value;
+        document.dispatchEvent(details.sound_setting ? changed_sound : changed_settings);
     });
 
     parent_el.appendChild(label_div_el);
@@ -84,6 +88,7 @@ export function make_menu(settings) {
             label_el.innerHTML = details.default;
             details.v = details.default;
         }
+        document.dispatchEvent(changed_settings);
     });
     
     buttons_el.appendChild(hide_button_el);
