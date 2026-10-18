@@ -24,6 +24,7 @@ const settings = {
 let playing_pitches = []; // [{last_event, group, octaves}, ...]
 let audio_started = false;
 let pending_refresh_all_pitches = false;
+let pending_buffer_redraw = false;
 
 const canvas = document.getElementById("gl_canvas");
 
@@ -34,10 +35,13 @@ Render.setup_rendering(canvas, window.innerWidth, window.innerHeight);
 
 window.addEventListener("resize", () => {
     Render.resize_canvas(canvas, window.innerWidth, window.innerHeight);
+    pending_buffer_redraw = true;
 });
 
 function animate(time) {
-    Render.render(time, settings, playing_pitches, audio_started);
+    Render.render(time, settings, playing_pitches, audio_started, pending_buffer_redraw);
+    pending_buffer_redraw = false;
+
     if (pending_refresh_all_pitches) {
         pending_refresh_all_pitches = false;
 
@@ -48,11 +52,14 @@ function animate(time) {
             const octaves = rgba[0];
 
             playing_pitches[index].octaves = octaves;
+            pending_buffer_redraw = true;
             play_voice(group, octaves);
         });
     }
     requestAnimationFrame(animate);
 }
+
+pending_buffer_redraw = true;
 requestAnimationFrame(animate);
 
 
@@ -103,6 +110,7 @@ async function touched_canvas(e) {
         if (existing_index == -1) return;
         dough.evaluate({dough: "hush_group", group: playing_pitches[existing_index].group});
         playing_pitches.splice(existing_index, 1); 
+        pending_buffer_redraw = true;
         return;
     } else if (e.type == "pointermove") {
         if (existing_index == -1) return;
@@ -129,8 +137,10 @@ async function touched_canvas(e) {
         playing_pitches[existing_index].octaves = octaves;
         playing_pitches[existing_index].last_event = e;
     }
+    pending_buffer_redraw = true;
 
     play_voice(group, octaves);
+    
 }
 canvas.addEventListener("pointerdown", touched_canvas);
 canvas.addEventListener("pointermove", touched_canvas);
@@ -154,5 +164,6 @@ document.addEventListener("changed_settings", (e) => {
         return;
     }
     // queue for next animation frame, when sliders have had an effect
+    pending_buffer_redraw = true;
     pending_refresh_all_pitches = true;
 });

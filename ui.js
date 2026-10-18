@@ -1,6 +1,10 @@
 const changed_settings = new CustomEvent("changed_settings", {detail: {sound_only: false}});
 const changed_sound = new CustomEvent("changed_settings", {detail: {sound_only: true}});
 
+function normalize_pow_value(value, min, max) {
+    return Math.sqrt((value - min) / (max - min));
+}
+
 function add_range_els(parent_el, id, details) {
     const {v: value, min, max, step, pow, round} = details;
     const name = details.label ?? id;
@@ -18,8 +22,7 @@ function add_range_els(parent_el, id, details) {
         range_el.min = 0;
         range_el.max = 1;
         range_el.step = 0.0001;
-        const norm_value = (value - min) / (max - min)
-        range_el.value = Math.sqrt(norm_value);
+        range_el.value = normalize_pow_value(value, min, max);
     }
     
 
@@ -62,7 +65,7 @@ export function make_menu(settings) {
 
     for (const [setting_key, setting_obj] of Object.entries(settings)) {
         // store the initial values while making the menu.
-        setting_obj.default = setting_obj.v;
+        setting_obj.initial_v = setting_obj.v;
 
         // make updateable slider with label and number display for the setting.
         add_range_els(menu_list_el, setting_key, setting_obj);
@@ -84,9 +87,13 @@ export function make_menu(settings) {
         for (const [param, details] of Object.entries(settings)) {
             const range_el = document.getElementById("range_" + param);
             const label_el = document.getElementById("value_label_" + param);
-            range_el.value = details.default;
-            label_el.innerHTML = details.default;
-            details.v = details.default;
+
+            const {pow, initial_v, min, max} = details;
+
+            range_el.value = pow ? normalize_pow_value(initial_v, min, max) : initial_v;
+
+            label_el.innerHTML = initial_v;
+            details.v = initial_v;
         }
         document.dispatchEvent(changed_settings);
     });
