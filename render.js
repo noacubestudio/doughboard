@@ -253,16 +253,14 @@ export function get_pixel_float_rgba(x, y) {
     return data;
 }
 
-export function render(time, settings, playing_pitches, audio_started, redraw_buffer) {
+export function render(time, settings, playing_pitches, audio_started) {
     // draw both textures
-    if (redraw_buffer) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-        gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
-        gl.useProgram(shader_program);
-        set_uniforms(shader_program, audio_started ? time * 0.001 : 0, settings, playing_pitches);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    gl.useProgram(shader_program);
+    set_uniforms(shader_program, audio_started ? time * 0.001 : 0, settings, playing_pitches);
 
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // blit display texture to screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
