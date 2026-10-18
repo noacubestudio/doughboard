@@ -51,7 +51,7 @@
                 user-select: none;
             }
             #menu-list {
-                padding: 4px 6px;
+                padding: 0px 6px 4px;
                 display: grid;
                 grid: auto-flow / auto auto;
                 gap: 4px;
@@ -78,8 +78,9 @@
             }
             #menu p {
                 margin: 4px 6px;
+                color: lightgrey;
             }
-            #menu p, #menu a {
+            #menu .smaller-text, #menu .smaller-text a {
                 color: lightgrey;
                 font-size: 15px;
             }
@@ -106,9 +107,12 @@
         <canvas id="gl_canvas" width="0" height="0"></canvas>
         <script type="module" src="main.js"></script>
         <div id="menu">
-            <div id="menu-buttons"></div>
+            <div id="menu-top" style="display: flex; flex-direction: column;">
+                <div id="menu-buttons"></div>
+                <p id="playing-pitches" class="smaller-text">-</p>
+            </div>
             <div id="menu-list"></div>
-            <p id="about-text" style="margin-bottom: 8px !important;">
+            <p class="smaller-text" id="about-text" style="margin-bottom: 8px !important;">
                 made by <a href="http://noacubestudio.github.io">noa</a>, sound from <a href="https://dough.strudel.cc/">dough</a>, <a href="https://github.com/noacubestudio/doughboard/">view source</a> 
             </p>
         </div>

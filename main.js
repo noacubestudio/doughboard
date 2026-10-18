@@ -51,6 +51,7 @@ function animate(time) {
             playing_pitches[index].octaves = octaves;
             play_voice(group, octaves);
         });
+        UI.write_playing_pitches(playing_pitches);
     }
     requestAnimationFrame(animate);
 }
@@ -105,6 +106,7 @@ async function touched_canvas(e) {
         if (existing_index == -1) return;
         dough.evaluate({dough: "hush_group", group: playing_pitches[existing_index].group});
         playing_pitches.splice(existing_index, 1); 
+        UI.write_playing_pitches(playing_pitches);
         return;
     } else if (e.type == "pointermove") {
         if (existing_index == -1) return;
@@ -131,6 +133,7 @@ async function touched_canvas(e) {
         playing_pitches[existing_index].octaves = octaves;
         playing_pitches[existing_index].last_event = e;
     }
+    UI.write_playing_pitches(playing_pitches);
 
     play_voice(group, octaves);
 }
@@ -147,6 +150,7 @@ canvas.addEventListener('touchmove', (e) => { e.preventDefault(); });
 // ui
 
 UI.make_menu(settings);
+UI.write_playing_pitches(playing_pitches);
 
 document.addEventListener("changed_settings", (e) => {
     if (!dough) return;

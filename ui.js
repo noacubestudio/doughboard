@@ -60,6 +60,7 @@ let menu_shown = true;
 
 export function make_menu(settings) {
     const menu_list_el = document.getElementById("menu-list");
+    const menu_top_el = document.getElementById("menu-top");
     const buttons_el = document.getElementById("menu-buttons");
     const about_text_el = document.getElementById("about-text");
 
@@ -77,6 +78,8 @@ export function make_menu(settings) {
         menu_shown = !menu_shown;
         hide_button_el.innerText = menu_shown ? "hide" : "menu";
         reset_button_el.style.display = menu_shown ? "inline-block" : "none";
+        menu_top_el.style.flexDirection = menu_shown ? "column" : "row";
+        menu_top_el.style.alignItems = menu_shown ? "flex-start" : "baseline";
 
         menu_list_el.style.display = menu_shown ? "grid" : "none";
         about_text_el.style.display = menu_shown ? "inline" : "none";
@@ -100,4 +103,11 @@ export function make_menu(settings) {
     
     buttons_el.appendChild(hide_button_el);
     buttons_el.appendChild(reset_button_el);
+}
+
+const playing_pitches_text_el = document.getElementById("playing-pitches");
+export function write_playing_pitches(playing_pitches) {
+    const pitches_string = playing_pitches.map(voice => Math.round(voice.octaves * 1200)).join(",");
+    playing_pitches_text_el.innerHTML = pitches_string ? pitches_string : "-";
+    playing_pitches_text_el.style.opacity = pitches_string ? 1.0 : 0.5;
 }
