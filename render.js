@@ -23,7 +23,7 @@ const fragment_source = /*glsl*/`#version 300 es
     uniform float u_tilt;
     uniform vec2 u_start_pos;
 
-    uniform float u_spiralize;
+    uniform int u_warp_mode;
     uniform vec2 u_grid_size;
     uniform vec2 u_grid_sharp;
 
@@ -80,7 +80,7 @@ const fragment_source = /*glsl*/`#version 300 es
         // half pixel offset for alignment, not sure if that makes sense.
         vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
 
-        if (u_spiralize == 1.) {
+        if (u_warp_mode == 1) {
             uv = spiralize(uv);
         } else {
             uv = gridize(uv);
@@ -95,7 +95,15 @@ const fragment_source = /*glsl*/`#version 300 es
             column_x = floor(column_x) + smoothstep(half_s, 1.-half_s, mod(column_x, 1.0));
         }
         // apply offset per column
+        if (u_warp_mode == 2) {
+            if (column_x >= 0.) {
+                column_x = log2(column_x + 1.);
+            } else {
+                column_x = -log2(1. - column_x);
+            }
+        }
         uv.y += column_x * u_column_offset;
+        
 
         float pitch_in_octave = mod(uv.y, 1.0);
         // separate octave into steps
@@ -280,7 +288,7 @@ function set_uniforms(program, time, settings, playing_pitches) {
     gl.uniform1f(at("u_time")                 , time);
     gl.uniform1fv(at("u_playing_pitches")     , pitches_in_octaves);
     gl.uniform1i(at("u_playing_pitches_count"), playing_pitches.length);
-    gl.uniform1f(at("u_spiralize")            , settings.spiralize.v);
+    gl.uniform1i(at("u_warp_mode")            , settings.warp_mode.v);
     gl.uniform2f(at("u_start_pos")            , settings.start_pos_x.v, settings.start_pos_y.v);
     gl.uniform2f(at("u_grid_size")            , settings.grid_size_x.v, settings.grid_size_y.v);
     gl.uniform2f(at("u_grid_sharp")           , settings.grid_sharp_x.v, settings.grid_sharp_y.v);

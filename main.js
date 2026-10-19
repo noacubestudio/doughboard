@@ -7,7 +7,7 @@ const settings = {
     grid_size_y:   {label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
     grid_sharp_x:  {label: "sharp (h)", v: 0.8, min: 0.0, max: 1.0, step: 0.05},
     grid_sharp_y:  {label: "sharp (v)", v: 0.6, min: 0.0, max: 1.0, step: 0.05},
-    spiralize:     {v: 0.0, min: 0.0, max: 1.0},
+    warp_mode:     {label: "warp mode", v: 0, min: 0, max: 2},
     column_offset: {label: "offset (v)", v: 2., min: 0.0, max: 12.0, step: 0.1},
     edo:           {label: "EDO", v: 12, min: 1, max: 128},
     tilt:          {label: "rotate", v: 0, min: 0, max: 360, step: 1},
