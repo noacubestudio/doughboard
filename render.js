@@ -73,6 +73,22 @@ const fragment_source = /*glsl*/`#version 300 es
         return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
     }
 
+    float scaleclamp(float edge0, float edge1, float x) {
+        return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    }
+
+    float x_to_cols(float x) {
+        x = floor(x);
+        if (u_warp_mode == 2) {
+            if (x >= 0.) {
+                x = log2(x + 1.);
+            } else {
+                x = -log2(1. - x);
+            }
+        }
+        return x * u_column_offset;
+    }
+
     ${okhsv_okhsl_conversion_source}
 
     void main() {
@@ -80,73 +96,68 @@ const fragment_source = /*glsl*/`#version 300 es
         // half pixel offset for alignment, not sure if that makes sense.
         vec2 uv = gl_FragCoord.xy - (u_start_pos * u_resolution) + 0.5;
 
+        // scale with correct grid dimensions
         if (u_warp_mode == 1) {
             uv = spiralize(uv);
         } else {
             uv = gridize(uv);
         }
 
-        // warp grid in x to make column offset smooth or sharp
-        float column_x = uv.x;
-        if (u_grid_sharp.x == 1.0) {
-            column_x = floor(column_x + 0.5);
-        } else if (u_grid_sharp.x > 0.0) {
-            float half_s = u_grid_sharp.x / 2.;
-            column_x = floor(column_x) + smoothstep(half_s, 1.-half_s, mod(column_x, 1.0));
-        }
-        // apply offset per column
-        if (u_warp_mode == 2) {
-            if (column_x >= 0.) {
-                column_x = log2(column_x + 1.);
-            } else {
-                column_x = -log2(1. - column_x);
-            }
-        }
-        uv.y += column_x * u_column_offset;
-        
+        // make columns, offset pitch with them.
+        uv.x += 0.5; // center initial column x on start pos
+        float this_col = x_to_cols(uv.x);
+        float x_in_col = mod(uv.x, 1.0);
 
-        float pitch_in_octave = mod(uv.y, 1.0);
-        // separate octave into steps
+        float adj_at = 1.0;
+        if (x_in_col < 0.5) { adj_at = -1.0; }
+        float delta_adj_col = x_to_cols(uv.x + adj_at)  - this_col; // for later
+
+        float pitch = uv.y + this_col;
+
+        // y: separate octave into steps, smooth between.
         if (u_grid_sharp.y == 1.0) {
-            pitch_in_octave = floor(pitch_in_octave * u_edo + 0.5) / u_edo;
+            pitch = floor(pitch * u_edo + 0.5) / u_edo;
         } else if (u_grid_sharp.y > 0.0) {
             float half_s = u_grid_sharp.y / 2.;
-            pitch_in_octave *= u_edo;
-            pitch_in_octave = floor(pitch_in_octave) + smoothstep(half_s, 1.-half_s, mod(pitch_in_octave, 1.0));
-            pitch_in_octave /= u_edo;
+            pitch *= u_edo;
+            pitch = floor(pitch) + scaleclamp(half_s, 1.-half_s, mod(pitch, 1.0));
+            pitch /= u_edo;
         }
 
-        float output_pitch = pitch_in_octave + floor(uv.y);
-        outData = vec4(output_pitch, 0.0, 0.0, 1.0);
+        // x: smooth in x using original UV and adjacent column offsets
+        if (u_grid_sharp.x < 1.0) {
+            pitch += delta_adj_col * scaleclamp(u_grid_sharp.x, 1.0, abs(x_in_col-0.5)*2.) * 0.5;
+        }
+
+        outData = vec4(pitch, 0.0, 0.0, 1.0);
 
         float highlight = 0.0;
         // highlight playing pitches
         for (int i = 0; i < 16; i++) {
             if (u_playing_pitches_count == i) { break; }
-            float rect_height = max(0.25, u_grid_sharp.y) / u_edo;
-            float pitch_dist = u_playing_pitches[i] - uv.y;
-            if (abs(pitch_dist) < 0.5 * rect_height) {
-                highlight = 1.0;
-            } else if (mod(pitch_dist + 0.5 * rect_height, 1.) < rect_height) { 
-                highlight = min(1., highlight += 0.12);
-            }
+            float rect_height = max(0.1, u_grid_sharp.y) / u_edo;
+            float pitch_dist = u_playing_pitches[i] - (uv.y + this_col);
+            highlight = min(1., highlight + 0.75 * (1. - step(rect_height, abs(pitch_dist) * 2.)));
+            highlight = min(1., highlight + 0.12 * (1. - step(rect_height, mod(pitch_dist + 0.5 * rect_height, 1.))));
+            highlight *= 1. - step(max(u_grid_sharp.x, 0.1), abs(x_in_col-0.5) * 2.0);
         }
         // highlight edo steps with centered dots
-        float dotl = 2. - u_grid_sharp.y;
         vec2 step_uv = vec2(
-            mod(uv.x + 0.5, 1.0) - 0.5, 
-            (mod(uv.y * u_edo + 0.5, 1.0) - 0.5) * dotl
+            (x_in_col - 0.5) / max(u_grid_sharp.x, 0.1), 
+            (mod((uv.y + this_col) * u_edo + 0.5, 1.0) - 0.5) / max(u_grid_sharp.y, 0.1)
         );
         float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
-        highlight = max(highlight, 1. - smoothstep(0.0, 1.0, dot_dist));
+        highlight = min(1., highlight + smoothstep(0.0, 1.0, 1. - dot_dist) * 0.75 
+                                      + step(0.0, 1. - dot_dist) * 0.1
+        );
 
         // not initiated yet, show that somehow.
         float dim = 1.;
         if (u_time == 0.) {
             dim = 0.5;
         }
-        float base_l = 0.4 * (uv.y / 16. + 0.5);
-        float h = pitch_in_octave + 0.05;
+        float base_l = 0.4 * (pitch / 16. + 0.5);
+        float h = mod(pitch, 1.) + 0.05;
         float s = highlight * 0.3 + 0.7;
         float l = clamp((highlight * 0.5 + base_l) * dim, 0.0, 1.0);
         outDisplay = vec4(okhsl_to_srgb(vec3(h, s, l)), 1.0);
