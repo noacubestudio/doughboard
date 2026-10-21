@@ -77,6 +77,16 @@ const fragment_source = /*glsl*/`#version 300 es
         return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
     }
 
+    float draw_step(vec2 step_uv) {
+        float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
+        return smoothstep(0.0, 1.0, 1. - dot_dist) * 0.75 + step(0.0, 1.0 - dot_dist) * 0.1;
+    }
+
+    float draw_played_step(vec2 step_uv) {
+        float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
+        return step(0.0, 1.0 - dot_dist);
+    }
+
     float x_to_cols(float x) {
         x = floor(x);
         if (u_warp_mode == 2) {
@@ -131,25 +141,26 @@ const fragment_source = /*glsl*/`#version 300 es
 
         outData = vec4(pitch, 0.0, 0.0, 1.0);
 
+
         float highlight = 0.0;
+        // x first
+        float step_h = max(u_grid_sharp.y, 0.1);
+        vec2 step_uv = vec2((x_in_col - 0.5) / max(u_grid_sharp.x, 0.1), 0.0);
+
         // highlight playing pitches
         for (int i = 0; i < 16; i++) {
             if (u_playing_pitches_count == i) { break; }
-            float rect_height = max(0.1, u_grid_sharp.y) / u_edo;
+
             float pitch_dist = u_playing_pitches[i] - (uv.y + this_col);
-            highlight = min(1., highlight + 0.75 * (1. - step(rect_height, abs(pitch_dist) * 2.)));
-            highlight = min(1., highlight + 0.12 * (1. - step(rect_height, mod(pitch_dist + 0.5 * rect_height, 1.))));
-            highlight *= 1. - step(max(u_grid_sharp.x, 0.1), abs(x_in_col-0.5) * 2.0);
+            step_uv.y = abs(pitch_dist) * u_edo / step_h;
+            highlight = min(1., highlight + 0.75 * draw_played_step(step_uv));
+            step_uv.y = abs(mod(pitch_dist + 0.5 * step_h, 1.) - 0.5 * step_h) * u_edo / step_h;
+            highlight = min(1., highlight + 0.15 * draw_played_step(step_uv));
         }
+
         // highlight edo steps with centered dots
-        vec2 step_uv = vec2(
-            (x_in_col - 0.5) / max(u_grid_sharp.x, 0.1), 
-            (mod((uv.y + this_col) * u_edo + 0.5, 1.0) - 0.5) / max(u_grid_sharp.y, 0.1)
-        );
-        float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
-        highlight = min(1., highlight + smoothstep(0.0, 1.0, 1. - dot_dist) * 0.75 
-                                      + step(0.0, 1. - dot_dist) * 0.1
-        );
+        step_uv.y = (mod((uv.y + this_col) * u_edo + 0.5, 1.0) - 0.5) / max(u_grid_sharp.y, 0.1);
+        highlight = min(1., highlight + draw_step(step_uv));
 
         // not initiated yet, show that somehow.
         float dim = 1.;
@@ -160,7 +171,7 @@ const fragment_source = /*glsl*/`#version 300 es
         float h = mod(pitch, 1.) + 0.05;
         float s = highlight * 0.3 + 0.7;
         float l = clamp((highlight * 0.5 + base_l) * dim, 0.0, 1.0);
-        outDisplay = vec4(okhsl_to_srgb(vec3(h, s, l)), 1.0);
+        outDisplay = vec4(hsv2rgb(vec3(h, s, l)), 1.0);
     }
 `;
 
