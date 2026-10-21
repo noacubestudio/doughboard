@@ -77,6 +77,19 @@ const fragment_source = /*glsl*/`#version 300 es
         return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
     }
 
+    float quantize(float pitch) {
+        if (u_grid_sharp.y == 1.0) {
+            return pitch = floor(pitch * u_edo + 0.5) / u_edo;
+        } 
+        if (u_grid_sharp.y > 0.0) {
+            float half_s = u_grid_sharp.y / 2.;
+            pitch *= u_edo;
+            pitch = floor(pitch) + scaleclamp(half_s, 1.-half_s, mod(pitch, 1.0));
+            pitch /= u_edo;
+        }
+        return pitch;
+    }
+
     float draw_step(vec2 step_uv) {
         float dot_dist = distance(step_uv, vec2(0.0)) * 2.;
         return smoothstep(0.0, 1.0, 1. - dot_dist) * 0.75 + step(0.0, 1.0 - dot_dist) * 0.1;
@@ -120,23 +133,18 @@ const fragment_source = /*glsl*/`#version 300 es
 
         float adj_at = 1.0;
         if (x_in_col < 0.5) { adj_at = -1.0; }
-        float delta_adj_col = x_to_cols(uv.x + adj_at)  - this_col; // for later
 
+        // y: separate octave into steps, keep smooth between.
         float pitch = uv.y + this_col;
+        pitch = quantize(pitch);
 
-        // y: separate octave into steps, smooth between.
-        if (u_grid_sharp.y == 1.0) {
-            pitch = floor(pitch * u_edo + 0.5) / u_edo;
-        } else if (u_grid_sharp.y > 0.0) {
-            float half_s = u_grid_sharp.y / 2.;
-            pitch *= u_edo;
-            pitch = floor(pitch) + scaleclamp(half_s, 1.-half_s, mod(pitch, 1.0));
-            pitch /= u_edo;
-        }
-
-        // x: smooth in x using original UV and adjacent column offsets
+        // x: smooth in x using original UV and adjacent pitch. basically need to do the prev step again here, but for the neighbor column!
         if (u_grid_sharp.x < 1.0) {
-            pitch += delta_adj_col * scaleclamp(u_grid_sharp.x, 1.0, abs(x_in_col-0.5)*2.) * 0.5;
+            float adj_pitch = uv.y + x_to_cols(uv.x + adj_at);
+            adj_pitch = quantize(adj_pitch);
+
+            float adj_amount = scaleclamp(u_grid_sharp.x, 1.0, abs(x_in_col-0.5)*2.) * 0.5;
+            pitch = mix(pitch, adj_pitch, adj_amount);
         }
 
         outData = vec4(pitch, 0.0, 0.0, 1.0);
@@ -171,7 +179,7 @@ const fragment_source = /*glsl*/`#version 300 es
         float h = mod(pitch, 1.) + 0.05;
         float s = highlight * 0.3 + 0.7;
         float l = clamp((highlight * 0.5 + base_l) * dim, 0.0, 1.0);
-        outDisplay = vec4(hsv2rgb(vec3(h, s, l)), 1.0);
+        outDisplay = vec4(okhsl_to_srgb(vec3(h, s, l)), 1.0);
     }
 `;
 
