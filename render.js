@@ -84,7 +84,7 @@ const fragment_source = /*glsl*/`#version 300 es
         if (u_grid_sharp.y > 0.0) {
             float half_s = u_grid_sharp.y / 2.;
             pitch *= u_edo;
-            pitch = floor(pitch) + scaleclamp(half_s, 1.-half_s, mod(pitch, 1.0));
+            pitch = floor(pitch) + smoothstep(half_s, 1.-half_s, mod(pitch, 1.0));
             pitch /= u_edo;
         }
         return pitch;
@@ -143,7 +143,7 @@ const fragment_source = /*glsl*/`#version 300 es
             float adj_pitch = uv.y + x_to_cols(uv.x + adj_at);
             adj_pitch = quantize(adj_pitch);
 
-            float adj_amount = scaleclamp(u_grid_sharp.x, 1.0, abs(x_in_col-0.5)*2.) * 0.5;
+            float adj_amount = smoothstep(u_grid_sharp.x, 1.0, abs(x_in_col-0.5)*2.) * 0.5;
             pitch = mix(pitch, adj_pitch, adj_amount);
         }
 

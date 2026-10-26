@@ -3,22 +3,23 @@ import * as UI from "./ui.js";
 import { Dough } from "./dough-synth/dough.js";
 
 const settings = {
-    grid_size_x:   {label: "zoom (h)", v: 50, min: 20, max: 200},
-    grid_size_y:   {label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
-    grid_sharp_x:  {label: "sharp (h)", v: 0.8, min: 0.0, max: 1.0, step: 0.05},
-    grid_sharp_y:  {label: "sharp (v)", v: 0.6, min: 0.0, max: 1.0, step: 0.05},
-    warp_mode:     {label: "warp mode", v: 0, min: 0, max: 2},
-    column_offset: {label: "offset (v)", v: 2., min: 0.0, max: 12.0, step: 0.1},
-    edo:           {label: "EDO", v: 12, min: 1, max: 128},
-    tilt:          {label: "rotate", v: 0, min: 0, max: 360, step: 1},
-    start_pos_x:   {label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    start_pos_y:   {label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
-    origin_freq:   {label: "origin freq", v: 220, min: 55, max: 880, pow: true, round: 1, sound_setting: true},
-    gain:          {v: 0.5, min: 0.0, max: 1.0, pow: true, sound_setting: true},
-    attack:        {v: 0.02, min: 0.01, max: 0.5, pow: true, sound_setting: true},
-    release:       {v: 0.3, min: 0, max: 2, pow: true, sound_setting: true},
-    delay:         {v: 0.2, min: 0, max: 1, pow: true, sound_setting: true},
-    reverb:        {v: 0.0, min: 0, max: 1, pow: true, sound_setting: true}
+    grid_size_x:   {type: "range", label: "zoom (h)", v: 50, min: 20, max: 200},
+    grid_size_y:   {type: "range", label: "zoom (v)", v: 600, min: 100, max: 1400, step: 5},
+    grid_sharp_x:  {type: "range", label: "sharp (h)", v: 0.8, min: 0.0, max: 1.0, step: 0.05},
+    grid_sharp_y:  {type: "range", label: "sharp (v)", v: 0.6, min: 0.0, max: 1.0, step: 0.05},
+    warp_mode:     {type: "range", label: "warp mode", v: 0, min: 0, max: 2},
+    column_offset: {type: "range", label: "offset (v)", v: 2., min: 0.0, max: 12.0, step: 0.1},
+    edo:           {type: "range", label: "EDO", v: 12, min: 1, max: 128},
+    tilt:          {type: "range", label: "rotate", v: 0, min: 0, max: 360, step: 1},
+    start_pos_x:   {type: "range", label: "origin (h)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    start_pos_y:   {type: "range", label: "origin (v)", v: 0.5, min: 0.0, max: 1.0, step: 0.01},
+    origin_freq:   {type: "sound", label: "origin freq", v: 220, min: 55, max: 880, round: 1},
+    gain:          {type: "sound", v: 0.5, min: 0.0, max: 1.0},
+    sound:         {type: "select", v: "saw", options: ["saw", "tri", "sine"]},
+    attack:        {type: "sound", v: 0.02, min: 0.01, max: 0.5},
+    release:       {type: "sound", v: 0.3, min: 0, max: 2},
+    delay:         {type: "sound", v: 0.2, min: 0, max: 1},
+    reverb:        {type: "sound", v: 0.0, min: 0, max: 1}
 }
 
 let playing_pitches = []; // [{last_event, group, octaves}, ...]
@@ -84,7 +85,7 @@ function play_voice(group, octaves) {
         freq, glide: 0.1, 
         gain: settings.gain.v, 
         lpf: 7000,
-        s: "saw", 
+        s: settings.sound.v, 
         vib: 6, vibmod: 0.05, 
         phaser: 0.5, phaserdepth: 0.1,
         attack: settings.attack.v, 
